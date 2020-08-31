@@ -62,3 +62,12 @@ p+ scale_x_date(date_labels = "%Y %b %d")
 
 
 ```
+
+
+Alternate types of timeseries are available for us to examine at the following link: 
+https://www.r-graph-gallery.com/time-series.html
+
+
+
+
+
