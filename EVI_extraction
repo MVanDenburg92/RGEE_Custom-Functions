@@ -58,6 +58,36 @@ Map.addLayer(AOI, {color: 'green'})
 
 print("done")
 
+
+
+
+// Make a chart.
+var chart = ui.Chart.image.series({
+  imageCollection: dataset.select('EVI'), 
+  region: AOI, 
+  reducer: ee.Reducer.first(), 
+  scale: 30
+});
+
+// Define custom options for the chart. See:
+// https://developers.google.com/chart/interactive/docs/reference
+var options = { 
+  title: 'EVI over time', 
+  hAxis: { title: 'time' },
+  vAxis: { title: 'EVI' },
+  series: {
+    0: { color: 'green' }
+  }
+};
+
+// Set the options of the chart and print it.
+chart = chart.setOptions(options);
+print(chart);
+
+
+
+
+
           
 
 
