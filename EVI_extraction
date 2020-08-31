@@ -1,0 +1,64 @@
+//The goal of this script is to extract EVI values for years: 2000 - 2019 using landsat imagery 
+
+// Filter image to get a cloud free composite
+
+var cloudMaskLandsat5 = function(image) {
+  var qa = image.select('pixel_qa');
+  // If the cloud bit (5) is set and the cloud confidence (7) is high
+  // or the cloud shadow bit is set (3), then it's a bad pixel.
+  var cloud = qa.bitwiseAnd(1 << 5)
+                  .and(qa.bitwiseAnd(1 << 7))
+                  .or(qa.bitwiseAnd(1 << 3));
+  // Remove edge pixels that don't occur in all bands
+  var mask2 = image.mask().reduce(ee.Reducer.min());
+  return image.updateMask(cloud.not()).updateMask(mask2);
+};
+
+
+ var AOI = 
+    /* color: #ffc82d */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-72.30321260892146, 42.69707031707116],
+          [-72.30321260892146, 42.02124129930544],
+          [-71.53416964017146, 42.02124129930544],
+          [-71.53416964017146, 42.69707031707116]]], null, true); 
+print("cloud free")
+
+//start and end dates for function 
+var start = ee.Date('2005-06-20');
+var finish = ee.Date('2006-06-01');
+
+var dataset =    ee.ImageCollection('LANDSAT/LT05/C01/T1_SR')
+                  .filterDate(start, finish)
+                  .filterBounds(AOI)
+                  //.filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+                  .map( cloudMaskLandsat5);
+                  
+
+  print("done")   
+  
+//var ROI= dataset.clip(AOI)  ;
+  
+  
+  var visParams = {
+  bands: ['B3', 'B2', 'B1'],
+  min: 0,
+  max: 3000,
+  gamma: 1.4,
+};
+
+Map.addLayer(dataset, visParams, 'TCC');
+Map.addLayer(AOI, {color: 'green'})
+
+print("done")
+
+          
+
+
+
