@@ -69,5 +69,438 @@ https://www.r-graph-gallery.com/time-series.html
 
 
 
+```{r}
+#Import rgee library into R
+
+remotes::install_github("r-spatial/rgee", force = TRUE)
+install.packages('geojsonio')
+install.packages('mapview')
+install.packages("greenbrown", repos="http://R-Forge.R-project.org")
+
+library(geojsonio)
+library(rgee)
+library(greenbrown)
+library(sf)
+library(mapview)
 
 
+# 
+# ee_current_version <- system.file("python/ee_utils.py", package = "rgee")
+# ee_utils <- rgee::ee_source_python(ee_current_version)
+# print(ee_utils$ee$'__version__')
+# 
+# 
+# 
+# 
+# library(rgee)
+# library(reticulate)
+# earthengine_python <- Sys.getenv("EARTHENGINE_PYTHON", unset = NA)
+# Sys.setenv(RETICULATE_PYTHON = earthengine_python)
+# reticulate::py_config()
+
+
+
+# library(rgee)
+# ee_check()
+ee_Initialize()
+reticulate::py_config()
+remotes::install_github("r-spatial/rgee", force = TRUE)
+
+# 4/3wGFipl797YDrGzUazAjNTj7k_qKQ1LGbJV8Oyew9AOKZqbWZU7a9fA
+
+ee_Initialize()
+ee_Initialize(email = 'miles.vandenburg@gmail.com')
+
+ee_clean_pyenv()
+
+ee_install()
+
+
+ee_check()
+
+# ee_reattach() # reattach ee as a reserve word
+ee_Initialize()
+
+
+
+col <- ee$ImageCollection('LANDSAT/LE07/C01/T1_32DAY_EVI')$select('EVI')
+
+
+```
+
+
+var example_roi = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-71.98329342936911, 42.61946548820058],
+          [-71.98329342936911, 42.617349592970655],
+          [-71.97852982615866, 42.617349592970655],
+          [-71.97852982615866, 42.61946548820058]]], null, false);
+
+
+
+
+
+// make the image collection
+var land5 = ee.ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI') .filterBounds(example_roi) 
+.filterDate("2000-01-01","2001-12-01") .select("EVI");
+print(land5);
+
+// change the name of the NDVI band to the image ID (date it is acquired)
+var lan5ndvi = land5.map( function(img){ 
+  var id  = img.id()
+  img = img.select('EVI').rename(id);
+return img.multiply(0.0001).copyProperties(img,['system:time_start','system:time_end']); });
+print(lan5ndvi);
+
+// Apply the function toBands() on the image collection to set all bands into one image
+var multiband = lan5ndvi.toBands();
+print(multiband)
+
+
+Demo Code from RGEE Github Page: https://github.com/r-spatial/rgee
+
+```{r}
+createTimeBand <-function(img) {
+  year <- ee$Date(img$get('system:time_start'))$get('year')$subtract(1991L)
+  ee$Image(year)$byte()$addBands(img)
+}
+
+```
+
+
+Adds a band containing image date as years since 1991.
+
+Map the time band creation helper over the night-time lights collection.
+
+
+
+```{r}
+collection <- ee$
+  ImageCollection('NOAA/DMSP-OLS/NIGHTTIME_LIGHTS')$
+  select('stable_lights')$
+  map(createTimeBand)
+```
+
+
+Compute a linear fit over the series of values at each pixel, visualizing the y-intercept in green, and positive/negative slopes as red/blue.
+
+
+```{r}
+col_reduce <- collection$reduce(ee$Reducer$linearFit())
+col_reduce <- col_reduce$addBands(
+  col_reduce$select('scale'))
+ee_print(col_reduce)
+
+```
+
+Create a interactive visualization!
+
+```{r}
+Map$setCenter(9.08203, 47.39835, 3)
+Map$addLayer(
+  eeObject = col_reduce,
+  visParams = list(
+    bands = c("scale", "offset", "scale"),
+    min = 0,
+    max = c(0.18, 20, -0.18)
+  ),
+  name = "stable lights trend"
+)
+```
+
+2) Extract precipitation values
+
+Install and load tidyverse and sf R package, after that, initialize the Earth Engine R API.
+
+```{r}
+library(tidyverse)
+library(rgee)
+library(sf)
+
+# ee_reattach() # reattach ee as a reserve word
+ee_Initialize()
+
+```
+
+
+
+
+Read the nc shapefile.
+
+
+```{r}
+nc <- st_read(system.file("shape/nc.shp", package = "sf"), quiet = TRUE)
+```
+
+
+
+Map each image from 2001 to extract the monthly precipitation (Pr) from the Terraclimate dataset
+
+
+```{r}
+terraclimate <- ee$ImageCollection("IDAHO_EPSCOR/TERRACLIMATE")$
+  filterDate("2001-01-01", "2002-01-01")$
+  map(function(x) x$reproject("EPSG:4326")$select("pr"))
+```
+
+
+
+Extract monthly precipitation values from the Terraclimate ImageCollection through ee_extract. ee_extract works similar to raster::extract, you just need to define: the ImageCollection object (x), the geometry (y), and a function to summarize the values (fun).
+
+```{r}
+ee_nc_rain <- ee_extract(x = terraclimate, y = nc, sf = FALSE)
+colnames(ee_nc_rain) <- sprintf("%02d", 1:12)
+ee_nc_rain$name <- nc$NAME
+```
+
+
+Use ggplot2 to generate a beautiful static plot!
+
+```{r}
+ee_nc_rain %>%
+  pivot_longer(-name, names_to = "month", values_to = "pr") %>%
+  ggplot(aes(x = month, y = pr, group = name, color = pr)) +
+  geom_line(alpha = 0.4) +
+  xlab("Month") +
+  ylab("Precipitation (mm)") +
+  theme_minimal()
+
+```
+
+
+
+3. Create an NDVI-animation (JS version)
+
+
+```{r}
+mask <- system.file("shp/arequipa.shp", package = "rgee") %>% 
+  st_read(quiet = TRUE) %>% 
+  sf_as_ee()
+region <- eco$geometry()$bounds()
+```
+ 
+
+
+Retrieve the MODIS Terra Vegetation Indices 16-Day Global 1km dataset as an ee.ImageCollection and select the NDVI band.
+
+
+```{r}
+evi <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')$select('EVI')
+
+```
+
+
+Group images by composite date
+
+```{r}
+col <- col$map(function(img) {
+  doy <- ee$Date(img$get('system:time_start'))$getRelative('day', 'year')
+  img$set('doy', doy)
+})
+distinctDOY <- col$filterDate('2013-01-01', '2014-01-01')
+```
+
+
+
+Define a filter that identifies which images from the complete collection match the DOY from the distinct DOY collection.
+
+```{r}
+filter <- ee$Filter$equals(leftField = 'doy', rightField = 'doy')
+
+```
+
+
+Define a join; convert the resulting FeatureCollection to an ImageCollection.
+
+```{r}
+join <- ee$Join$saveAll('doy_matches')
+joinCol <- ee$ImageCollection(join$apply(distinctDOY, col, filter))
+```
+
+
+Apply median reduction among matching DOY collections.
+
+```{r}
+comp <- joinCol$map(function(img) {
+  doyCol = ee$ImageCollection$fromImages(
+    img$get('doy_matches')
+  )
+  doyCol$reduce(ee$Reducer$median())
+})
+```
+
+Define RGB visualization parameters.
+
+```{r}
+visParams = list(
+  min = 0.0,
+  max = 9000.0,
+  bands = "EVI_median",
+  palette = c(
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+    )
+)
+```
+
+Create RGB visualization images for use as animation frames.
+
+```{r}
+rgbVis <- comp$map(function(img) {
+  do.call(img$visualize, visParams) %>% 
+    ee$Image$clip(mask)
+})
+```
+
+Define GIF visualization parameters.
+
+```{r}
+gifParams <- list(
+  region = region,
+  dimensions = 600,
+  crs = 'EPSG:3857',
+  framesPerSecond = 10
+)
+```
+
+Render the GIF animation in the console.
+
+```{r}
+print(rgbVis$getVideoThumbURL(gifParams))
+browseURL(rgbVis$getVideoThumbURL(gifParams))
+```
+
+
+Test of code for Landsat imagery and converting the collection into a raster stack 
+
+
+import shapfile for the ecoregion
+
+```{r}
+library(sf)
+
+eco_mask <- st_read('Ecoregion.shp',quiet = TRUE) %>% st_transform(3857) 
+# 
+# %>% st_as_sf(.) 
+# 
+# st_crs(eco_mask)
+# str(eco)
+# st_crs(eco_mask) <- st_crs(nc)
+
+eco_mask2 <- eco_mask %>% sf_as_ee(.)
+
+region <- eco_mask2$geometry()$bounds()
+
+
+region <- eco$geometry()$bounds()
+eco <- st_read('Ecoregion.shp')
+summary(eco)
+
+str(eco)
+st_crs(eco_mask2) <- st_crs(nc)
+
+plot(eco)
+
+```
+
+
+
+Bring in google earth imagery
+```{r}
+
+evi_2 <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')$select('EVI')
+
+```
+
+
+
+Group images by composite date
+
+```{r}
+col <- col$map(function(img) {
+  moy <- ee$Date(img$get('system:time_start'))$getRelative('month', 'year')
+  img$set('moy', moy)
+})
+distinctMOY <- col$filterDate('2000-01-01', '2002-01-01')
+```
+
+
+
+Define a filter that identifies which images from the complete collection match the DOY from the distinct DOY collection.
+
+```{r}
+filter <- ee$Filter$equals(leftField = 'moy', rightField = 'moy')
+
+```
+
+
+Define a join; convert the resulting FeatureCollection to an ImageCollection.
+
+```{r}
+join <- ee$Join$saveAll('moy_matches')
+joinCol <- ee$ImageCollection(join$apply(distinctMOY, col, filter))
+```
+
+
+Apply median reduction among matching DOY collections.
+
+```{r}
+comp <- joinCol$map(function(img) {
+  doyCol = ee$ImageCollection$fromImages(
+    img$get('moy_matches')
+  )
+  moyCol$reduce(ee$Reducer$median())
+})
+```
+
+Define RGB visualization parameters.
+
+```{r}
+visParams = list(
+  min = 0.0,
+  max = 9000.0,
+  bands = "EVI_median",
+  palette = c(
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+    )
+)
+```
+
+Create RGB visualization images for use as animation frames.
+
+```{r}
+rgbVis <- comp$map(function(img) {
+  do.call(img$visualize, visParams) %>% 
+    ee$Image$clip(eco_mask2)
+})
+```
+
+Define GIF visualization parameters.
+
+```{r}
+gifParams <- list(
+  region = region,
+  dimensions = 600,
+  crs = 'EPSG:3857',
+  framesPerSecond = 10
+)
+```
+
+
+
+Render the GIF animation in the console.
+
+```{r}
+print(rgbVis$getVideoThumbURL(gifParams))
+browseURL(rgbVis$getVideoThumbURL(gifParams))
+```
