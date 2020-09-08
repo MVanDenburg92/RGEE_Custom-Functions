@@ -1,45 +1,32 @@
-library(data.table)
-library(tidyr)
-library(dplyr)
-library(pryr)
-library(ggplot2)
-library(lubridate)
-
-#Miles code:
-
-mem_used()
-gcinfo(FALSE)
-gc()
-
-getwd()
-
-data_fold <-  getwd()
-
-data_file <- paste0(data_fold,"/ee-chart.csv")
-
-#Import csv file
-# newData_master <- data.table::fread(file = data_file)
-
-newData_df <- read.csv(file = data_file)
+#Goal: This script aims to connect to Google earth engine, creates EVI foe everymoth for 2 years, and build a raster stack.
 
 
-#transpose the df
+#Import rgee library into R from github as well as other packages needed
 
-df_pivotwide <- newData_df%>%
-  pivot_wider(names_from = system.time_start, values_from = EVI)
+remotes::install_github("r-spatial/rgee", force = TRUE)
+install.packages('geojsonio')
+install.packages('mapview')
+install.packages("greenbrown", repos="http://R-Forge.R-project.org")
+
+library(geojsonio)
+library(rgee)
+library(greenbrown)
+library(sf)
+library(mapview)
+
+#initialize and authenticate GEE
+
+ee_Initialize(email = 'shreenapyakurel@gmail.com')
+
+#import Image collection
+
+EVI_dat <- ee$ImageCollection('LANDSAT/LE07/C01/T1_32DAY_EVI')$select('EVI')
+
+#Group images by composite date
+nc <- st_read(system.file("shape/nc.shp", package = "sf"), quiet = TRUE)
 
 
-summary(newData_df)
-
-str(newData_df)
-
-mdy(newData_df[[1]])
 
 
-newData_df_convert <- newData_df %>% mutate(dates = mdy(.[[1]])) %>% select(dates, EVI)
 
-p <- ggplot(newData_df_convert, aes(x=dates, y=EVI)) +
-  geom_line() +
-  xlab("")
 
-p+ scale_x_date(date_labels = "%Y %b %d")
