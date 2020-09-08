@@ -1,0 +1,113 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Test of code for Landsat imagery and converting the collection into a raster stack 
+
+
+import shapfile for the ecoregion
+
+```{r}
+library(sf)
+
+mask <- system.file("shp/arequipa.shp", package = "rgee") %>% 
+  st_read(quiet = TRUE) %>% 
+  sf_as_ee()
+region <- mask$geometry()$bounds()
+
+
+```
+
+
+
+Bring in google earth imagery
+```{r}
+
+col <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')$select('EVI')
+
+```
+
+
+
+Group images by composite date
+
+```{r}
+col <- col$map(function(img) {
+  moy <- ee$Date(img$get('system:time_start'))$getRelative('month', 'year')
+  img$set('moy', moy)
+})
+distinctMOY <- col$filterDate('2000-01-01', '2001-01-01')
+```
+
+
+
+Define a filter that identifies which images from the complete collection match the DOY from the distinct DOY collection.
+
+```{r}
+filter <- ee$Filter$equals(leftField = 'moy', rightField = 'moy')
+
+```
+
+
+Define a join; convert the resulting FeatureCollection to an ImageCollection.
+
+```{r}
+join <- ee$Join$saveAll('moy_matches')
+joinCol <- ee$ImageCollection(join$apply(distinctMOY, col, filter))
+```
+
+
+Apply median reduction among matching DOY collections.
+
+```{r}
+comp <- joinCol$map(function(img) {
+  doyCol = ee$ImageCollection$fromImages(
+    img$get('moy_matches')
+  )
+  joinCol$reduce(ee$Reducer$median())
+})
+```
+
+Define RGB visualization parameters.
+
+```{r}
+visParams = list(
+  min = 0.0,
+  max = 9000.0,
+  bands = "EVI_median",
+  palette = c(
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+    )
+)
+```
+
+Create RGB visualization images for use as animation frames.
+
+```{r}
+rgbVis <- comp$map(function(img) {
+  do.call(img$visualize, visParams) %>% 
+    ee$Image$clip(eco_mask2)
+})
+```
+
+Define GIF visualization parameters.
+
+```{r}
+gifParams <- list(
+  region = region,
+  dimensions = 600,
+  crs = 'EPSG:3857',
+  framesPerSecond = 20
+)
+```
+
+
+
+Render the GIF animation in the console.
+
+```{r}
+print(rgbVis$getVideoThumbURL(gifParams))
+browseURL(rgbVis$getVideoThumbURL(gifParams))
+```
