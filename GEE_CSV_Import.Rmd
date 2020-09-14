@@ -75,10 +75,25 @@ https://www.r-graph-gallery.com/time-series.html
 remotes::install_github("r-spatial/rgee", force = TRUE)
 install.packages('geojsonio')
 install.packages('mapview')
+install.packages("phenopix")
+install.packages("bfast")
 install.packages("greenbrown", repos="http://R-Forge.R-project.org")
+#'quantreg', 'fields', 'ncdf4'
+install.packages("Kendall")
+install.packages("quantreg")
+install.packages("fields")
+install.packages("ncdf4")
+
+
 
 library(geojsonio)
 library(rgee)
+library(phenopix)
+library(bfast)
+library(Kendall)
+library(quantreg)
+library(fields)
+library(ncdf4)
 library(greenbrown)
 library(sf)
 library(mapview)
@@ -510,7 +525,7 @@ browseURL(rgbVis$getVideoThumbURL(gifParams))
 raster::brick(comp)
 ```
 
-
+git push origin Miles --force
 
 
 ```{r}
