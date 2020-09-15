@@ -9,11 +9,13 @@ import shapfile for the ecoregion
 
 ```{r}
 library(sf)
-
+library(geospaar)
 mask <- system.file("shp/arequipa.shp", package = "rgee") %>% 
   st_read(quiet = TRUE) %>% 
   sf_as_ee()
 region <- mask$geometry()$bounds()
+
+ 
 
 
 ```
@@ -23,7 +25,7 @@ region <- mask$geometry()$bounds()
 Bring in google earth imagery
 ```{r}
 
-col <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')$select('EVI')
+col <- ee$FeatureCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')$select('EVI')
 
 ```
 
@@ -66,6 +68,19 @@ comp <- joinCol$map(function(img) {
   )
   joinCol$reduce(ee$Reducer$median())
 })
+comp1<-ee$FeatureCollection("comp")
+comp
+```
+```{r}
+multiband = comp$toBands();
+print(multiband)
+
+  
+```
+
+convert images to a raster stack 
+```{r}
+stack(multiband)
 ```
 
 Define RGB visualization parameters.
@@ -82,6 +97,18 @@ visParams = list(
     )
 )
 ```
+
+
+```{r}
+Map$addLayer( eeObject= comp1, visParams = visParams, name = "EVI")
+comp1
+
+
+
+
+
+```
+
 
 Create RGB visualization images for use as animation frames.
 
@@ -111,3 +138,82 @@ Render the GIF animation in the console.
 print(rgbVis$getVideoThumbURL(gifParams))
 browseURL(rgbVis$getVideoThumbURL(gifParams))
 ```
+
+
+
+
+```{r}
+library(rgee)
+library(sf)
+
+
+mask <- system.file("shp/arequipa.shp", package = "rgee") %>% 
+  st_read(quiet = TRUE) %>% 
+  sf_as_ee()
+region <- mask$geometry()$bounds()
+
+col <- ee$ImageCollection('MODIS/006/MOD13A2')$select('NDVI')
+
+
+col <- col$map(function(img) {
+  doy <- ee$Date(img$get('system:time_start'))$getRelative('day', 'year')
+  img$set('doy', doy)
+})
+distinctDOY <- col$filterDate('2013-01-01', '2014-01-01')
+
+filter <- ee$Filter$equals(leftField = 'doy', rightField = 'doy')
+
+join <- ee$Join$saveAll('doy_matches')
+joinCol <- ee$ImageCollection(join$apply(distinctDOY, col, filter))
+
+comp <- joinCol$map(function(img) {
+  doyCol = ee$ImageCollection$fromImages(
+    img$get('doy_matches')
+  )
+  doyCol$reduce(ee$Reducer$median())
+})
+
+visParams = list(
+  min = 0.0,
+  max = 9000.0,
+  bands = "NDVI_median",
+  palette = c(
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+    )
+)
+
+rgbVis <- comp$map(function(img) {
+  do.call(img$visualize, visParams) %>% 
+    ee$Image$clip(mask)
+})
+
+gifParams <- list(
+  region = region,
+  dimensions = 600,
+  crs = 'EPSG:3857',
+  framesPerSecond = 10
+)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
