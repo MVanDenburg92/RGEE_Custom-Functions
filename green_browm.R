@@ -1,3 +1,6 @@
+install.packages("googledrive")
+
+library(googledrive)
 library(geospaar)
 library(greenbrown)
 library(rgee)
@@ -15,8 +18,6 @@ plot(phenmap, 1)
 plot(phenmap, grep("SOS.2002", names(phenmap))) # start of season 2002
 plot(phenmap, grep("EOS.2002", names(phenmap))) # end of season 2002
 plot(phenmap, grep("LOS.2002", names(phenmap))) # length of season 2002
-
-
 #plot(phenmap, grep("POP.1982", names(phenmap))) # position of peak value 2002
 #plot(phenmap, grep("POT.1982", names(phenmap))) # position of trough value 2002
 # plot(phenmap, grep("MGS.1982", names(phenmap))) # mean growing season value 2002
