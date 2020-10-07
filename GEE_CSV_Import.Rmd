@@ -236,11 +236,11 @@ Install and load tidyverse and sf R package, after that, initialize the Earth En
 
 ```{r}
 library(tidyverse)
-library(rgee)
+# library(rgee)
 library(sf)
 
 # ee_reattach() # reattach ee as a reserve word
-ee_Initialize()
+# ee_Initialize()
 
 ```
 
@@ -298,7 +298,7 @@ ee_nc_rain %>%
 mask <- system.file("shp/arequipa.shp", package = "rgee") %>% 
   st_read(quiet = TRUE) %>% 
   sf_as_ee()
-region <- eco$geometry()$bounds()
+region <- mask$geometry()$bounds()
 ```
  
 
@@ -307,7 +307,7 @@ Retrieve the MODIS Terra Vegetation Indices 16-Day Global 1km dataset as an ee.I
 
 
 ```{r}
-evi <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')$select('EVI')
+col <- ee$ImageCollection('MODIS/006/MOD13A2')$select('NDVI')
 
 ```
 
@@ -357,7 +357,7 @@ Define RGB visualization parameters.
 visParams = list(
   min = 0.0,
   max = 9000.0,
-  bands = "EVI_median",
+  bands = "NDVI_median",
   palette = c(
     'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
     '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
