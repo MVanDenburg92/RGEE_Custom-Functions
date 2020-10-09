@@ -15,28 +15,42 @@ knitr::opts_chunk$set(echo = TRUE)
 library(greenbrown)
 library(sf)
 library(sp)
-
-#remotes::install_github("r-spatial/rgee") Install if you don't have already
-library(rgee)
-
 library(tidyverse)
+# devtools::install_github("rstudio/reticulate")
 library(reticulate)
+ee_reattach()
+
+#Install if you don't have already
+# remotes::install_github("r-spatial/rgee")
+library(rgee)
+ee_install()
+ee_Initialize(email = 'miles.vandenburg@gmail.com')
+ee_reattac
+ee_check()
+
+# install.packages(c('processx','ps'))
+packageVersion('rgee')
+# rgee::ee_check()
+reticulate::py_config()
 
 
-# ee_clean_pyenv()
-# ee_clean_credentials()
-# ee_Initialize()
+ee_clean_pyenv()
+ee_clean_credentials()
+ee_Initialize()
 
 
 ee = import("ee")          # Import the Earth Engine library
 ee$Initialize() 
 
-np = import("numpy")       # Import Numpy 
-
+np = import("numpy")      # Import Numpy 
 
 py_install("pandas")       #Install Pandas if you don't have it already installed
 
 pd = import("pandas")      # Import Pandas
+
+sys = import("sys")
+
+sys.maxsize()
 
 
 
@@ -76,6 +90,12 @@ eco_mask <- st_read('Ecoregion.shp',quiet = TRUE) %>% st_transform(4326)
 
 eco_mask_ee <- sf_as_ee(eco_mask)
 
+#Smaller ecoregion
+
+# eco_mask2 <- st_read('Ecoregion_Small.shp',quiet = TRUE) %>% st_transform(4326) 
+# 
+# eco_mask_ee2 <- sf_as_ee(eco_mask2)
+
 ```
 
 
@@ -84,7 +104,9 @@ Bring in the imagery from RGEE
 ```{r}
 s3 <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')
 
-s3 <-  s3$filterDate(ee$Date('1999-12-01'), ee$Date('2001-01-01'))$filterBounds(eco_mask_ee)
+s3 <-  s3$filterDate(ee$Date('2000-01-01'),ee$Date('2003-01-01'))$filterBounds(eco_mask_ee)
+
+
 
 
 #Show the amount of images in the collection
@@ -99,7 +121,7 @@ s3 = s3$map(function(image){image$clip(eco_mask_ee)})
 s3 = s3$select("EVI")
 
 #Get information about the collection 
-s3$getInfo()
+sinfo <- s3$getInfo()
 
 
 #get more information on what's stored in the bands
@@ -112,7 +134,6 @@ s3$getInfo()
 Get setup for the loop.  In case the loop crashes or doesn't work, you must rerun the above chunk first before running this chunk again. 
 ```{r}
 nimages <- s3$size()$getInfo()
-
 ic_date <- ee_get_date_ic(s3)
 
 
@@ -123,66 +144,98 @@ lngs <- list()
 evi_values <- list()
 s2_names <- list()
 
-for(index in seq_len(nimages)) {
-  py_index <- index - 1
+evi_values2 <- list()
+evi_values3 <- list()
+
+
+# s2_img_list[[15]]$getInfo()
+
+for(i in seq_len(nimages)) {
+  py_index <- i - 1
   s2_img <- ee$Image(s3$toList(1, py_index)$get(0))
   s2_name <- s2_img$get('system:index')$getInfo()
+  s2_names[[i]] <- s2_name
   s2_img <- s2_img$select("EVI")$rename(s2_name)
-  s2_img_list[[index]] <- ee$Image$pixelLonLat()$addBands(s2_img)
-  s2_img_list[[index]] <-  s2_img_list[[index]]$reduceRegion(reducer = ee$Reducer$toList(),
-                                                        geometry  = eco_mask_ee, 
-                                                        maxPixels = 1e6, 
-                                                        scale = 10, 
+  s2_img_list[[i]] <- ee$Image$pixelLonLat()$addBands(s2_img)
+  s2_img_list[[i]] <-  s2_img_list[[i]]$reduceRegion(reducer = ee$Reducer$toList(),
+                                                        geometry  = eco_mask_ee,
+                                                        maxPixels = 1e6,
+                                                        scale = 30,
                                                         bestEffort = TRUE)
-  lats[[index]] <-  np$array((ee$Array(s2_img_list[[index]]$get("latitude"))$getInfo()))
-  lngs[[index]]  <- np$array((ee$Array(s2_img_list[[index]]$get("longitude"))$getInfo()))
-  evi_values[[index]] <-  np$array((ee$Array(s2_img_list[[index]]$get(s2_name))$getInfo()))
-  
+  lats <-  np$array((ee$Array(s2_img_list[[1]]$get("latitude"))$getInfo()))
+  lngs  <- np$array((ee$Array(s2_img_list[[1]]$get("longitude"))$getInfo()))
 }
-```
+
+for(index in seq_len(nimages)) {
+      evi_values3[[index]] <-  ee$List(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()
+      
+}
 
 
+evi_values<- evi_values3
 
-```{r}
-#Create test copy of list to name and evaluate
-lats_test <- lats
+funny <- function(x){
+  np$array((x))
+}
 
-names(lats_test) <- ic_date$id
+evi_values <- lapply(evi_values,function(x){
+  np$array((x))
+})
 
-#Will evaluate to false sincce the names have change
-
-identical(lats_test[1], lats_test[2])
-
-
-
-#Cerate back-up copy to test lat_long equality
-
-lats_test_2 <- lats
-
-identical(lats_test_2[1], lats_test_2[13])
-
-
-#Cerate back-up copy to test lat_long equality
-
-lngs_test <- lngs
-
-identical(lngs_test[1], lngs_test[13])
-
-names(lngs_test) <- ic_date$id
-
-length(evi_values)
-
-######
 
 #Create copy of evi values and rename the columns of the elements
- evis <- evi_values
+evis <- evi_values
 names(evis) <- ic_date$id
 
-lats3 <- unlist(lats[1])
-lng3 <- unlist(lngs[1])
 
-####
-
+# 
+# 
+# for (f in evi_tester)){
+# np$array((evi_tester[[f]]))
+# }
+# 
+# np$array2string
+# 
+# 
+# 
+# 
+# 
+# for(x in seq_len(nimages)) {
+#   evi_values2[[x]] <-  np$array((ee$Array(s2_img_list[[x]]$get(s2_names[[x]]))$getInfo()))
+#         if(i <= 20) {
+#                 ## Skip the first 20 iterations
+#                 next                 
+#         }
+#         ## Do something here
+# }
+# 
+# index = 1
+# evi_values2 <-list()
+# evi_values3 <- list()
+# while(nimages >= index) {
+#          if(index <= 26 ) {  ## random walk
+#           evi_values2[[index]] <-  np$array((ee$List(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()))
+# 
+#                  index <- index + 1
+#          }else {
+#           evi_values3[[index]] <-  np$array((ee$Array(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()))
+# 
+#                index <- index + 1
+#          } 
+#  }
+# > print(z)
+# 
+#       # if (27 > index){
+#       # evi_values[[index]] <-  np$array((ee$Array(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()))
+#       # }else{
+#       # evi_values2[[index]] <-  np$array((ee$Array(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()))
+#       # }else {
+#       #    print('What a great day!')
+#       # }
+# 
+#   # lats[[index]] <-  np$array((ee$Array(s2_img_list[[index]]$get("latitude"))$getInfo()))
+#   # lngs[[index]]  <- np$array((ee$Array(s2_img_list[[index]]$get("longitude"))$getInfo()))
+#   # evi_values[[index]] <-  np$array((ee$Array(s2_img_list[[index]]$get(s2_name))$getInfo()))
 ```
 
 
@@ -192,10 +245,120 @@ Convert list to matrix and create dataframe out of the lats, longs, and evi valu
 
 ```{r}
 
-evis_df <- data.frame(x = lng3,y = lats3,lapply(evis, "length<-", max(lengths(evis))))
+# names(evi_tester) <- ic_date$id
+
+evis_df <- data.frame(x = lngs,y = lats,lapply(evis, "length<-", max(lengths(evis))))
 
 library(raster)
 XYZ_2 <- rasterFromXYZ(evis_df, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 
+```
+
+
+```{r}
+#-------------------------------------------------------------------
+#Extrating phenology using Green Brown Package
+#Demo code
+# load a multi-temporal raster dataset of Normalized Difference Vegetation Index
+library(greenbrown)
+data(ndvimap)
+plot(XYZ_2, 8)
+
+# calculate phenology metrics (this can take some time!)
+# Parallel computing??
+#took a couple hours-- How can we reduce time!!
+
+phenmap <- PhenologyRaster(XYZ_2, start=c(2000, 1), freq=12, tsgf="TSGFspline", approach="Deriv")
+# Select method by defining 'tsgf' (temporal smoothing and gap filling) and
+# by 'approach' (method to summarize phenology metrics).
+# See \code{\link{Phenology}} for examples and a comparison of methods.
+#----------------------------------------------------------------------------------
+
+plot(phenmap)
+par(mar = c(2, 2, 2, 2))
+par(mar = c(1, 1, 1, 1))
+plot(phenmap, grep("SOS.2001", names(phenmap))) # start of season 2000
+plot(phenmap, grep("EOS.2000", names(phenmap))) # end of season 2000
+plot(phenmap, grep("LOS.2000", names(phenmap))) # length of season 2000
+plot(phenmap, grep("POP.2000", names(phenmap))) # position of peak value 2000
+plot(phenmap, grep("POT.2000", names(phenmap))) # position of trough value 2000
+plot(phenmap, grep("MGS.2000", names(phenmap))) # mean growing season value 2000
+plot(phenmap, grep("PEAK.2000", names(phenmap))) # peak value 2000
+plot(phenmap, grep("TROUGH.2000", names(phenmap))) # trough value 2000
+plot(phenmap, grep("MSP.2000", names(phenmap))) # mean spring value 2000
+plot(phenmap, grep("MAU.2000", names(phenmap))) # mean autumn value 2000
+plot(phenmap, grep("RSP.2000", names(phenmap))) # rate of spring greenup 2000
+plot(phenmap, grep("RAU.2000", names(phenmap))) # rate of autumn senescence 2000
+
+# calculate trends on length of season using TrendRaster
+losmap <- subset(phenmap, grep("LOS", names(phenmap)))
+plot(losmap)
+lostrend <- TrendRaster(losmap, start=c(2000, 1), freq=1)
+plot(lostrend)
+
+# classify trends in length of season
+lostrend.cl <- TrendClassification(lostrend)
+plot(lostrend.cl, col=brgr.colors(3), breaks=c(-1.5, -0.5, 0.5, 1.5))
+# only a few pixels have a positive trend in the length of growing season
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+d2 <- data(ndvi)
+phenmap2 <- PhenologyRaster(ndvimap, start=c(2000, 1), freq=12,
+                           tsgf="TSGFspline", approach="Deriv")
+# Select method by defining 'tsgf' (temporal smoothing and gap filling) and
+# by 'approach' (method to summarize phenology metrics).
+# See \code{\link{Phenology}} for examples and a comparison of methods.
+#----------------------------------------------------------------------------------
 ```
 
