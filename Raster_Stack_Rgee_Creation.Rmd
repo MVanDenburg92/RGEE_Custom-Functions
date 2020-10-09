@@ -17,26 +17,28 @@ library(sf)
 library(sp)
 library(tidyverse)
 # devtools::install_github("rstudio/reticulate")
-library(reticulate)
-ee_reattach()
 
 #Install if you don't have already
 # remotes::install_github("r-spatial/rgee")
 library(rgee)
-ee_install()
+
+
+# ee_install()
 ee_Initialize(email = 'miles.vandenburg@gmail.com')
-ee_reattac
-ee_check()
+
+library(reticulate)
+
+# ee_check()
 
 # install.packages(c('processx','ps'))
 packageVersion('rgee')
 # rgee::ee_check()
-reticulate::py_config()
+# reticulate::py_config()
 
-
-ee_clean_pyenv()
-ee_clean_credentials()
-ee_Initialize()
+# 
+# ee_clean_pyenv()
+# ee_clean_credentials()
+# ee_Initialize()
 
 
 ee = import("ee")          # Import the Earth Engine library
@@ -162,31 +164,11 @@ for(i in seq_len(nimages)) {
                                                         maxPixels = 1e6,
                                                         scale = 30,
                                                         bestEffort = TRUE)
-  lats <-  np$array((ee$Array(s2_img_list[[1]]$get("latitude"))$getInfo()))
-  lngs  <- np$array((ee$Array(s2_img_list[[1]]$get("longitude"))$getInfo()))
-}
-
-for(index in seq_len(nimages)) {
-      evi_values3[[index]] <-  ee$List(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()
-      
 }
 
 
-evi_values<- evi_values3
-
-funny <- function(x){
-  np$array((x))
-}
-
-evi_values <- lapply(evi_values,function(x){
-  np$array((x))
-})
-
-
-#Create copy of evi values and rename the columns of the elements
-evis <- evi_values
-names(evis) <- ic_date$id
-
+lats <-  np$array((ee$Array(s2_img_list[[1]]$get("latitude"))$getInfo()))
+lngs  <- np$array((ee$Array(s2_img_list[[1]]$get("longitude"))$getInfo()))
 
 # 
 # 
@@ -240,6 +222,47 @@ names(evis) <- ic_date$id
 
 
 
+Obtain the EVI values and clean the results of the google earth engine list
+```{r}
+
+#For loop to extract all the iamges from the s2_img_list list containing them and converting them to ee.List elements storing them in the evi_values2 list. 
+
+for(index in seq_len(nimages)) {
+      evi_values2[[index]] <-  ee$List(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()
+      
+}
+
+evi_values<- evi_values2
+
+funny <- function(x){
+  np$array((x))
+}
+
+
+#Convert list elements of evi_values into num py arrays
+evi_values <- lapply(evi_values,function(x){
+  np$array((x))
+})
+
+
+
+
+#Lapply method -- takes same amount of time 1:37 for 36 images. 
+# evi_values4 <- list()
+# evi_values5 <- lapply(seq_len(nimages),function(x){
+#   evi_values4[[x]] <-  ee$List(s2_img_list[[x]]$get(s2_names[[x]]))$getInfo()
+# })
+# 
+# 
+
+
+#Create copy of evi values and rename the columns of the elements
+evis <- evi_values
+names(evis) <- ic_date$id
+```
+
+
+
 Convert list to matrix and create dataframe out of the lats, longs, and evi values
 
 
@@ -262,7 +285,7 @@ XYZ_2 <- rasterFromXYZ(evis_df, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +
 # load a multi-temporal raster dataset of Normalized Difference Vegetation Index
 library(greenbrown)
 data(ndvimap)
-plot(XYZ_2, 8)
+plot(XYZ_2, 36)
 
 # calculate phenology metrics (this can take some time!)
 # Parallel computing??
