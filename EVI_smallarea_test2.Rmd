@@ -15,15 +15,14 @@ library(rgee)
 
 library(tidyverse)
 library(reticulate)
+ee_install()
+ ee_clean_pyenv()
+ ee_clean_credentials()
+ ee_Initialize()
 
 
-# ee_clean_pyenv()
-# ee_clean_credentials()
-# ee_Initialize()
-
-
-#ee = import("ee")          # Import the Earth Engine library
-#ee$Initialize() 
+ee = import("ee")          # Import the Earth Engine library
+ee$Initialize() 
 
 np = import("numpy")       # Import Numpy 
 
@@ -67,10 +66,11 @@ Bring on the RGEE Objects and Vectors
 #   )
 # )
 
-
+library(sf)
 # Most important for us
 eco_mask <- st_read('Ecoregion_Small.shp',quiet = TRUE) %>% st_transform(4326) 
 
+library(rgee)
 eco_mask_ee <- sf_as_ee(eco_mask)
 
 ```
