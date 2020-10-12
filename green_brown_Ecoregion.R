@@ -8,11 +8,13 @@ library(tidyverse)
 library(reticulate)
 library(sf)
 library(sp)
+library(rgee)
 
 #Import python modules RGEE works in a python environment
 py_install("numpy")
-np = import("numpy")
-
+np <- import("numpy")
+py_install("ee")
+ee <-  import("ee")
 
 py_install("pandas")
 pd = import("pandas")
@@ -121,7 +123,7 @@ XYZ_2 <- rasterFromXYZ(evis_df, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +
 raster::plot(XYZ_2, 8)
 
 XYZ_SP<- rasterFromXYZ(evis_df, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
-raster::plot(XYZ_2, 8)
+raster::plot(XYZ_SP, 8)
 
 #-------------------------------------------------------------------
 #Extrating phenology using Green Brown Package
@@ -145,7 +147,7 @@ phenmap <- PhenologyRaster(XYZ_2, start=c(2000, 1), freq=12,
 plot(phenmap)
 par(mar = c(2, 2, 2, 2))
 par(mar = c(1, 1, 1, 1))
-plot(phenmap, grep("SOS.2001", names(phenmap))) # start of season 2000
+plot(phenmap, grep("SOS.2000", names(phenmap))) # start of season 2000
 plot(phenmap, grep("EOS.2000", names(phenmap))) # end of season 2000
 plot(phenmap, grep("LOS.2000", names(phenmap))) # length of season 2000
 plot(phenmap, grep("POP.2000", names(phenmap))) # position of peak value 2000
