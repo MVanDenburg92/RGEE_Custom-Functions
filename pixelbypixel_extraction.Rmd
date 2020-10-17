@@ -151,14 +151,16 @@ evis_df2 <- evis_df %>%
 pixel1 <- evis_df2 %>% 
   select (-c(x, y)) %>%
   arrange() %>% 
-  slice(1) 
+  slice(1) %>% 
+  t() 
 
 #create time series 
-NDVIseries <- ts(NDVIseries, start=c(2000, 1), end=c(2007, 12), frequency=12)
+NDVIseries <- ts(pixel1, start=c(2000, 1), end=c(2008, 1), frequency=12)
 yt <- NDVIseries
+plot(yt)
 
 # time series pre-processing ---interpolating 
-Yt_interpolate <- TsPP(yt, tsgf=TSGFspline)
+Yt_interpolate <- TsPP(NDVIseries, tsgf=TSGFspline)
 plot(Yt_interpolate)
 
 #calculate metrics
@@ -179,7 +181,7 @@ plot(Phen_2000_2007[["eos"]])
 plot(Phen_2000_2007[["pop"]])
 plot(Phen_2000_2007[["los"]])
 
-#create dataframe 
+# extract variables of choice 
 sos <- as.numeric( Phen_2000_2007[["sos"]])
 eos <-  as.numeric( Phen_2000_2007[["eos"]])
 los <-  as.numeric( Phen_2000_2007[["los"]])
@@ -187,19 +189,24 @@ pop <-  as.numeric( Phen_2000_2007[["pop"]])
 
 #coordinates for first pixel
 coords <-evis_df2 %>% select(x, y) %>% slice(1)
-y<-data.frame(Date=(seq(as.Date('2000/01/01'),as.Date('2007/01/01'), by="year")))   #create the year column
+y<-data.frame(Date=(seq(as.Date('2000/01/01'),as.Date('2008/01/01'), by="year")))   #create the year column
 library(lubridate)
 y$Year<-year(y$Date)
 years <- y$Year
-years <-  format(as.Date(years, format="%d/%m/%Y"),"%Y")  
 
 #Dataframe
-DF <- data.frame(coords, sos, eos, los, pop) %>% 
-  mutate(`year` = years)
+DF_phenmet <- data.frame(coords, sos, eos, los, pop) %>% 
+  cbind(years) 
 
 #convert into SF object 
+DF_phenmet_sf = st_as_sf(DF_phenmet, coords = c("x", "y"), crs = 4326)
 
-
+#force into raster
+rast <- raster()
+extent(rast) <- extent(DF_phenmet_sf) # this might be unnecessary
+ncol(rast) <- 20 # this is one way of assigning cell size / resolution
+nrow(rast) <- 20
+rast2 <- rasterize(DF_phenmet_sf$sos, rast,  fun=mean) 
 
 
 
