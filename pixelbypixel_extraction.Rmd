@@ -1,0 +1,221 @@
+---
+title: "timeseries_vec"
+author: "Shreena Pyakurel"
+date: "10/17/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(greenbrown)
+library(sf)
+library(sp)
+library(tidyverse)
+# devtools::install_github("rstudio/reticulate")
+
+#Install if you don't have already
+# remotes::install_github("r-spatial/rgee")
+library(rgee)
+library(reticulate)
+
+# ee_install()
+ee_Initialize(email = 'shreenapyakurel@gmail.com')
+
+np = import("numpy")      # Import Numpy 
+
+py_install("pandas")       #Install Pandas if you don't have it already installed
+
+pd = import("pandas")      # Import Pandas
+
+```
+
+Bring on the RGEE Objects and Vectors
+```{r}
+#eco_mask <- st_read('Ecoregion.shp',quiet = TRUE) %>% st_transform(4326) 
+#eco_mask_ee <- sf_as_ee(eco_mask)
+
+#Smaller ecoregion
+
+ eco_mask2 <- st_read('Ecoregion_Small.shp',quiet = TRUE) %>% st_transform(4326) 
+eco_mask_ee2 <- sf_as_ee(eco_mask2)
+```
+
+Bring in the imagery from RGEE
+
+```{r}
+s3 <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')
+
+s3 <-  s3$filterDate(ee$Date('2000-01-01'),ee$Date('2008-01-01'))$filterBounds(eco_mask_ee2)
+
+#Show the amount of images in the collection
+nbrImages_s3 = s3$size()$getInfo()
+nbrImages_s3
+
+#Mapping the clip function over the collection
+s3 = s3$map(function(image){image$clip(eco_mask_ee2)})
+
+#Selecting the EVI band which holds the information
+s3 = s3$select("EVI")
+
+#Get information about the collection 
+sinfo <- s3$getInfo()
+
+```
+
+Get setup for the loop.  In case the loop crashes or doesn't work, you must rerun the above chunk first before running this chunk again. 
+```{r}
+nimages <- s3$size()$getInfo()
+ic_date <- ee_get_date_ic(s3)
+
+
+s2_img_list <- list()
+latlng <- list()
+lats <- list()
+lngs <- list()
+evi_values <- list()
+s2_names <- list()
+
+evi_values2 <- list()
+evi_values3 <- list()
+
+for(i in seq_len(nimages)) {
+  py_index <- i - 1
+  s2_img <- ee$Image(s3$toList(1, py_index)$get(0))
+  s2_name <- s2_img$get('system:index')$getInfo()
+  s2_names[[i]] <- s2_name
+  s2_img <- s2_img$select("EVI")$rename(s2_name)
+  s2_img_list[[i]] <- ee$Image$pixelLonLat()$addBands(s2_img)
+  s2_img_list[[i]] <-  s2_img_list[[i]]$reduceRegion(reducer = ee$Reducer$toList(),
+                                                        geometry  = eco_mask_ee2,
+                                                        maxPixels = 1e6,
+                                                        scale = 30,
+                                                        bestEffort = TRUE)
+}
+
+
+lats <-  np$array((ee$Array(s2_img_list[[1]]$get("latitude"))$getInfo()))
+lngs  <- np$array((ee$Array(s2_img_list[[1]]$get("longitude"))$getInfo()))
+
+```
+
+Obtain the EVI values and clean the results of the google earth engine list
+```{r}
+
+#For loop to extract all the iamges from the s2_img_list list containing them and converting them to ee.List elements storing them in the evi_values2 list. 
+
+for(index in seq_len(nimages)) {
+      evi_values2[[index]] <-  ee$List(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()
+      
+}
+
+evi_values<- evi_values2
+
+funny <- function(x){
+  np$array((x))
+}
+
+
+#Convert list elements of evi_values into num py arrays
+evi_values <- lapply(evi_values,function(x){
+  np$array((x))
+})
+
+#Create copy of evi values and rename the columns of the elements
+evis <- evi_values
+names(evis) <- ic_date$id
+```
+
+Convert list to matrix and create dataframe out of the lats, longs, and evi values
+
+```{r}
+
+evis_df <- data.frame(x = lngs,y = lats,lapply(evis, "length<-", max(lengths(evis))))
+
+#check for NA in dataframe
+na_count <-sapply(evis_df, function(y) sum(length(which(is.na(y)))))
+
+evis_df2 <- evis_df %>%
+   mutate_all(as.numeric)
+
+
+```
+
+**Greenbrown**
+```{r}
+#phenology for  1 pixel
+
+#select 1 pixel 
+pixel1 <- evis_df2 %>% 
+  select (-c(x, y)) %>%
+  arrange() %>% 
+  slice(1) 
+
+#create time series 
+NDVIseries <- ts(NDVIseries, start=c(2000, 1), end=c(2007, 12), frequency=12)
+yt <- NDVIseries
+
+# time series pre-processing ---interpolating 
+Yt_interpolate <- TsPP(yt, tsgf=TSGFspline)
+plot(Yt_interpolate)
+
+#calculate metrics
+Phen_2000_2007 <- Phenology(Yt_interpolate, approach="White")
+plot(Phen_2000_2007)
+
+
+#just 2000
+x <- TsPP(yt, interpolate=TRUE)[1:365]
+plot(x)
+
+# calculate phenology metrics for first year (2000)and plot graph
+PhenoDeriv(x, plot=TRUE, xlab = "Day Of Year", ylab = "EVI")
+
+#Plots SOS, EOS, POP, LOS
+plot(Phen_2000_2007[["sos"]])
+plot(Phen_2000_2007[["eos"]])
+plot(Phen_2000_2007[["pop"]])
+plot(Phen_2000_2007[["los"]])
+
+#create dataframe 
+sos <- as.numeric( Phen_2000_2007[["sos"]])
+eos <-  as.numeric( Phen_2000_2007[["eos"]])
+los <-  as.numeric( Phen_2000_2007[["los"]])
+pop <-  as.numeric( Phen_2000_2007[["pop"]])
+
+#coordinates for first pixel
+coords <-evis_df2 %>% select(x, y) %>% slice(1)
+y<-data.frame(Date=(seq(as.Date('2000/01/01'),as.Date('2007/01/01'), by="year")))   #create the year column
+library(lubridate)
+y$Year<-year(y$Date)
+years <- y$Year
+years <-  format(as.Date(years, format="%d/%m/%Y"),"%Y")  
+
+#Dataframe
+DF <- data.frame(coords, sos, eos, los, pop) %>% 
+  mutate(`year` = years)
+
+#convert into SF object 
+
+
+
+
+
+
+       
+  
+  
+
+
+```
+
+Loop over 4 pixels, convert into sf object, then into raster 
+```{r}
+
+```
+
+
+```
+
