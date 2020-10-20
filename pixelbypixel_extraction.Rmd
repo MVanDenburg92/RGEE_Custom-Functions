@@ -148,19 +148,35 @@ evis_df2 <- evis_df %>%
 #phenology for  1 pixel
 
 #select 1 pixel 
+evis_df2
+pixelly <- list()
+evis_df3 <- evis_df2 %>% select (-c(x, y))
+for (i in nrow(evis_df3)){
+pixelly[[i]] <- evis_df3 %>%
+  arrange() %>% 
+  slice(i) %>% 
+  t() 
+}
+
+eviiiii <-  lapply(nrow(evis_df3), function(x){
+  pixelly[[i]] <- evis_df3 %>%
+  arrange() %>% 
+  t()
+})
+
 pixel1 <- evis_df2 %>% 
   select (-c(x, y)) %>%
   arrange() %>% 
   slice(1) %>% 
   t() 
-
+str(pixel1)
 #create time series 
-NDVIseries <- ts(pixel1, start=c(2000, 1), end=c(2008, 1), frequency=12)
+EVIseries <- ts(pixel1, start=c(2000, 1), end=c(2008, 1), frequency=12)
 yt <- NDVIseries
 plot(yt)
 
 # time series pre-processing ---interpolating 
-Yt_interpolate <- TsPP(NDVIseries, tsgf=TSGFspline)
+Yt_interpolate <- TsPP(EVIseries, tsgf=TSGFspline)
 plot(Yt_interpolate)
 
 #calculate metrics
@@ -172,7 +188,7 @@ x <- TsPP(yt, interpolate=TRUE)[1:365]
 plot(x)
 
 # calculate phenology metrics for first year (2000)and plot graph
-PhenoDeriv(x, plot=TRUE, xlab = "Day Of Year", ylab = "EVI")
+ PhenoDeriv(x, plot=TRUE, xlab = "Day Of Year", ylab = "EVI")
 
 #Plots SOS, EOS, POP, LOS
 plot(Phen_2000_2007[["sos"]])
