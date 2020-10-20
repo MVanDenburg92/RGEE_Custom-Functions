@@ -167,7 +167,6 @@ plot(Yt_interpolate)
 Phen_2000_2007 <- Phenology(Yt_interpolate, approach="White")
 plot(Phen_2000_2007)
 
-
 #just 2000
 x <- TsPP(yt, interpolate=TRUE)[1:365]
 plot(x)
@@ -200,21 +199,16 @@ DF_phenmet <- data.frame(coords, sos, eos, los, pop) %>%
 
 #convert into SF object 
 DF_phenmet_sf = st_as_sf(DF_phenmet, coords = c("x", "y"), crs = 4326)
-
+par(mar = c(0, 0, 0, 0))
+ggplot() +
+  geom_sf(data = eco_mask2, fill = "grey")+
+  geom_sf(data= DF_phenmet_sf, col = "blue")
 #force into raster
-rast <- raster()
-extent(rast) <- extent(DF_phenmet_sf) # this might be unnecessary
-ncol(rast) <- 20 # this is one way of assigning cell size / resolution
-nrow(rast) <- 20
-rast2 <- rasterize(DF_phenmet_sf$sos, rast,  fun=mean) 
-
-
-
-
-       
-  
-  
-
+# rast <- raster()
+# extent(rast) <- extent(DF_phenmet_sf) # this might be unnecessary
+# ncol(rast) <- 20 # this is one way of assigning cell size / resolution
+# nrow(rast) <- 20
+# rast2 <- rasterize(DF_phenmet_sf$sos, rast,  fun=mean) 
 
 ```
 
