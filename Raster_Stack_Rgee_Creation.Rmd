@@ -462,9 +462,6 @@ evis_df_s4 <- data.frame(x = lngs2,y = lats2,lapply(eviss4, "length<-", max(leng
 # 
 #   
 # i <- 1
-
-pos <- grep(pattern = "NA", x = evis_df_s4)
-
 # while(length(pos) > 0)
 # 
 # i <- length(pos)
@@ -480,15 +477,16 @@ pos <- grep(pattern = "NA", x = evis_df_s4)
 #     evis_df_s4[pos[i]] <- evis_df_s4[ncol(evis_df_s4)]
 # } else
 #   print(evis_df_s4)
-
-while(is.na(evis_df_s4)){
-  pos <- grep(pattern = "NA", x = evis_df_s4)
+pos <- grep(pattern = "NA", x = evis_df_s4)
+while(length(pos)>0){
   for(t in pos){
-  if(t < ncol(evis_df_s4)){
-  evis_df_s4[t] <- (evis_df_s4[t+1]-evis_df_s4[t-1])/2
-  }else
+    if(t < ncol(evis_df_s4)){
+    evis_df_s4[t] <- (evis_df_s4[t+1]-evis_df_s4[t-1])/2
+    }else
     evis_df_s4[t] <- evis_df_s4[ncol(evis_df_s4)-1]
-}
+  }
+  pos <- grep(pattern = "NA", x = evis_df_s4)
+
 }
 
 #Test out final column
@@ -513,17 +511,21 @@ names(evis_df_s4)[3:length(evis_df_s4)] <- as.character(dates)
 evis_df_s4_2 <- evis_df_s4 %>%
    mutate_all(as.numeric)
 
-XYZ_S4 <- rasterFromXYZ(evis_df_s4_2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
-xyzstack <-  stack(XYZ_S4)
 
+evis_df_s4_2 <- evis_df_s4 %>%
+   mutate_all(as.numeric)
 
 # seq(ymd('2000-01-01'),ymd('2003-12-01'),by='months')
 ```
 
 
+### Step to create the raster
+
 ```{r}
-evis_df_s4_2 <- evis_df_s4 %>%
-   mutate_all(as.numeric)
+
+XYZ_S4 <- rasterFromXYZ(evis_df_s4_2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+xyzstack <-  stack(XYZ_S4)
+
 ```
 
 **Greenbrown**
@@ -553,19 +555,19 @@ all_pixels <- evis_df_s4_2 %>%
 str(all_pixels)
 
 
-EVIseries <- ts(all_pixels, start=c(2000, 1), end=c(2007, 12), frequency=12)
 # #create time series 
 # 
+
+EVIseries <- ts(all_pixels, start=c(2000, 1), end=c(2007, 12), frequency=12)
+
+
+
+
 # matrix1 <- matrix() 
 # mapply(all_pixels, function(x){
 #   ts(x, start=c(2000, 1), end=c(2004, 1), frequency=12)
 #   
 # })
-
-
-######## Create time series for EVIseries2
-EVIseries <- ts(all_pixels, start=c(2000, 1), end=c(2007, 12), frequency=12)
-
 
 #Create copy of time series matrix to mess with
 yt <- EVIseries
@@ -586,7 +588,7 @@ plot(yt[,1:10])
 
 xc <- EVIseries[,1]
 Yt_interpolate_m_test <- TsPP(EVIseries[,1], tsgf=TSGFspline)
-plot(Yt_interpolate)
+plot(Yt_interpolate_m_test)
 
 # mapply(all_pixels, function(x){
 #   ts(x, start=c(2000, 1), end=c(2004, 1), frequency=12)
@@ -614,7 +616,7 @@ Yt_interpolate_m[[x]]  <- TsPP(EVIseries[,x], tsgf=TSGFspline)
 
 
 #calculate metrics
-Phen_2000_2007 <- Phenology(Yt_interpolate_m2, approach="White")
+# Phen_2000_2007 <- Phenology(Yt_interpolate_m2, approach="White")
 
 
 
@@ -671,7 +673,7 @@ los <- unlist(los)
 pop <- unlist(pop)
 
 
-coords <-evis_df_s4_2 %>% select(x, y) %>% slice(1)
+coords <-evis_df_s4_2 %>% select(x, y) 
 coords2 <- coords %>% slice(rep(1:n(), each = 8))
 
 
@@ -722,18 +724,18 @@ plot(DF_phenmet_raster)
 
 
 
-
-plot(Phen_2000_2007)
-#just 2000
-x <- TsPP(EVIseries[,1], interpolate=TRUE)[1:365]
-plot(x)
-# calculate phenology metrics for first year (2000)and plot graph
- PhenoDeriv(x, plot=TRUE, xlab = "Day Of Year", ylab = "EVI")
-#Plots SOS, EOS, POP, LOS
-plot(Phen_2000_2007[["sos"]])
-plot(Phen_2000_2007[["eos"]])
-plot(Phen_2000_2007[["pop"]])
-plot(Phen_2000_2007[["los"]])
+# 
+# plot(Phen_2000_2007)
+# #just 2000
+# x <- TsPP(EVIseries[,1], interpolate=TRUE)[1:365]
+# plot(x)
+# # calculate phenology metrics for first year (2000)and plot graph
+#  PhenoDeriv(x, plot=TRUE, xlab = "Day Of Year", ylab = "EVI")
+# #Plots SOS, EOS, POP, LOS
+# plot(Phen_2000_2007[["sos"]])
+# plot(Phen_2000_2007[["eos"]])
+# plot(Phen_2000_2007[["pop"]])
+# plot(Phen_2000_2007[["los"]])
 
 
 #Calculate metrics for whole matrix
@@ -746,23 +748,23 @@ plot(Phen_2000_2007[["los"]])
 # })
 # 
 
-
-Phen_2000_2007 <- Phenology(Yt_interpolate, approach="White")
-plot(Phen_2000_2007)
-#just 2000
-
-sos <- as.numeric( Phen_2000_2007[["sos"]])
-str(sos)
-eos <-  as.numeric( Phen_2000_2007[["eos"]])
-str(eos)
-los <-  as.numeric( Phen_2000_2007[["los"]])
-str(los)
-pop <-  as.numeric( Phen_2000_2007[["pop"]])
-str(pop)
-
-
-
-
+# 
+# Phen_2000_2007 <- Phenology(Yt_interpolate, approach="White")
+# plot(Phen_2000_2007)
+# #just 2000
+# 
+# sos <- as.numeric( Phen_2000_2007[["sos"]])
+# str(sos)
+# eos <-  as.numeric( Phen_2000_2007[["eos"]])
+# str(eos)
+# los <-  as.numeric( Phen_2000_2007[["los"]])
+# str(los)
+# pop <-  as.numeric( Phen_2000_2007[["pop"]])
+# str(pop)
+# 
+# 
+# 
+# 
 
 
 # extract variables of choice 
@@ -777,25 +779,25 @@ str(pop)
 
 
 
-#coordinates for first pixel
-coords <-evis_df_s4_2 %>% select(x, y) %>% slice(1)
-# y<-data.frame(Date=(seq(as.Date('2000/01/01'),as.Date('2008/01/01'), by="year")))   #create the year column
-
+# #coordinates for first pixel
+# coords <-evis_df_s4_2 %>% select(x, y) %>% slice(1)
+# # y<-data.frame(Date=(seq(as.Date('2000/01/01'),as.Date('2008/01/01'), by="year")))   #create the year column
+# 
+# # y$Year<-year(y$Date)
+# # years <- y$Year
+# 
+# y <- data.frame(Date=(seq(dates[1], dates[length(dates)], by = 'year')))
 # y$Year<-year(y$Date)
 # years <- y$Year
-
-y <- data.frame(Date=(seq(dates[1], dates[length(dates)], by = 'year')))
-y$Year<-year(y$Date)
-years <- y$Year
-
-#Dataframe
-DF_phenmet <- data.frame(coords, sos, eos, los, pop) %>% cbind(years) 
-#convert into SF object 
-DF_phenmet_sf = st_as_sf(DF_phenmet, coords = c("x", "y"), crs = 4326)
-par(mar = c(0, 0, 0, 0))
-ggplot() +
-  geom_sf(data = eco_mask2, fill = "grey")+
-  geom_sf(data= DF_phenmet_sf, col = "blue")
+# 
+# #Dataframe
+# DF_phenmet <- data.frame(coords, sos, eos, los, pop) %>% cbind(years) 
+# #convert into SF object 
+# DF_phenmet_sf = st_as_sf(DF_phenmet, coords = c("x", "y"), crs = 4326)
+# par(mar = c(0, 0, 0, 0))
+# ggplot() +
+#   geom_sf(data = eco_mask2, fill = "grey")+
+#   geom_sf(data= DF_phenmet_sf, col = "blue")
 #force into raster
 # rast <- raster()
 # extent(rast) <- extent(DF_phenmet_sf) # this might be unnecessary
