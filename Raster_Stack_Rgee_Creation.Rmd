@@ -16,6 +16,11 @@ library(greenbrown)
 library(sf)
 library(sp)
 library(tidyverse)
+
+library(raster)
+library(qdapRegex)
+library(lubridate)
+
 # devtools::install_github("rstudio/reticulate")
 
 #Install if you don't have already
@@ -40,18 +45,18 @@ packageVersion('rgee')
 # ee_Initialize()
 
 
-ee = import("ee")          # Import the Earth Engine library
-ee$Initialize() 
+# ee = import("ee")          # Import the Earth Engine library
+# ee$Initialize() 
 
 np = import("numpy")      # Import Numpy 
 
-py_install("pandas")       #Install Pandas if you don't have it already installed
-
-pd = import("pandas")      # Import Pandas
-
-sys = import("sys")
-
-sys.maxsize()
+# py_install("pandas")       #Install Pandas if you don't have it already installed
+# 
+# pd = import("pandas")      # Import Pandas
+# 
+# sys = import("sys")
+# 
+# sys.maxsize()
 
 
 
@@ -437,8 +442,7 @@ Convert list to matrix and create dataframe out of the lats, longs, and evi valu
 
 evis_df <- data.frame(x = lngs,y = lats,lapply(evis, "length<-", max(lengths(evis))))
 
-library(raster)
-XYZ_2 <- rasterFromXYZ(evis_df, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+XYZ_2 <- raster::rasterFromXYZ(evis_df, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 
 ```
 
@@ -446,10 +450,6 @@ Same code as above but smaller eco region
 
 
 ```{r}
-
-library(raster)
-library(qdapRegex)
-library(lubridate)
 
 # names(evi_tester) <- ic_date$id
 
@@ -532,7 +532,7 @@ xyzstack <-  stack(XYZ_S4)
 ```{r}
 #phenology for  1 pixel
 #select 1 pixel 
-evis_df_s4_2
+# evis_df_s4_2
 # pixelly <- list()
 # evis_df_s4_2 <- evis_df_s4 %>% select (-c(x, y))
 # for (i in nrow(evis_df_s4_2)*length(evis_df_s4_2)){
@@ -552,7 +552,7 @@ all_pixels <- evis_df_s4_2 %>%
   slice(1:nrow(evis_df_s4_2)) %>% 
   t() 
 
-str(all_pixels)
+# str(all_pixels)
 
 
 # #create time series 
@@ -574,10 +574,10 @@ yt <- EVIseries
 
 
 #remember, row,column
-yt[,1]
-#Will encounter the following error if we attempt to plot more than 10 pixels of data -----
-#Error in plotts(x = x, y = y, plot.type = plot.type, xy.labels = xy.labels,  : cannot plot more than 10 series as "multiple"
-plot(yt[,1:10])
+# yt[,1]
+# #Will encounter the following error if we attempt to plot more than 10 pixels of data -----
+# #Error in plotts(x = x, y = y, plot.type = plot.type, xy.labels = xy.labels,  : cannot plot more than 10 series as "multiple"
+# plot(yt[,1:10])
 
 
 # time series pre-processing ---interpolating 
@@ -585,10 +585,10 @@ plot(yt[,1:10])
 #Will encounter error if we attempt to plot more than 1 row
 #the condition has length > 1 and only the first element will be usedError in TsPP(EVIseries2[, 1:2], tsgf = TSGFspline) : TsPP: Yt should be class of 'ts'.
 
-
-xc <- EVIseries[,1]
-Yt_interpolate_m_test <- TsPP(EVIseries[,1], tsgf=TSGFspline)
-plot(Yt_interpolate_m_test)
+# 
+# xc <- EVIseries[,1]
+# Yt_interpolate_m_test <- TsPP(EVIseries[,1], tsgf=TSGFspline)
+# plot(Yt_interpolate_m_test)
 
 # mapply(all_pixels, function(x){
 #   ts(x, start=c(2000, 1), end=c(2004, 1), frequency=12)
@@ -683,61 +683,50 @@ DF_phenmet_testarranged <- DF_phenmet_test %>% arrange(years)
 
 
 DF_phenmet_testarranged_sf = st_as_sf(DF_phenmet_testarranged, coords = c("x", "y"), crs = 4326)
-par(mar = c(0, 0, 0, 0))
-ggplot() +
-  geom_sf(data = eco_mask2, fill = "grey")+
-  geom_sf(data= DF_phenmet_testarranged_sf)
-
-DF_phenmet_raster2 <- raster(DF_phenmet_testarranged)
-DF_phenmet_raster<- rasterFromXYZ(DF_phenmet_testarranged, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
-
-DF_phenmet_raster2 <- raster(DF_phenmet_testarranged)
-
-
-DF_phenmet_raster3 <- list()
-
-for(i in nrow(DF_phenmet_testarranged)){
-  DF_phenmet_raster4 <- raster(DF_phenmet_testarranged_sf) %>% group_by(year)
-}
+# par(mar = c(0, 0, 0, 0))
+# ggplot() +
+#   geom_sf(data = eco_mask2, fill = "grey")+
+#   geom_sf(data= DF_phenmet_testarranged_sf)
+# 
+# DF_phenmet_raster2 <- raster(DF_phenmet_testarranged)
+# DF_phenmet_raster<- rasterFromXYZ(DF_phenmet_testarranged, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+# 
+# DF_phenmet_raster2 <- raster(DF_phenmet_testarranged)
 
 
-install.packages("fasterize")
-library(fasterize)
+# DF_phenmet_raster3 <- list()
+# 
+# for(i in nrow(DF_phenmet_testarranged)){
+#   DF_phenmet_raster4 <- raster(DF_phenmet_testarranged_sf) %>% group_by(year)
+# }
+
+# 
+# install.packages("fasterize")
+# library(fasterize)
 rast <- raster()
 
-s <- DF_phenmet_testarranged %>% filter(years == "2000")
-yt[1] <- as.character(years)
+# s <- DF_phenmet_testarranged %>% filter(years == "2000")
+
+
+year_chars <- as.character(years)
+#year_chars[1]
 
 separated_rasters <- list()
-x <- length(years)
+# x <- length(years)
 for(i in years){
   for(g in seq(years)){
-   separated_rasters[[g]] <- lapply(years[g], function(x){DF_phenmet_testarranged %>% filter(years == yt[g])})
+   separated_rasters[[g]] <- lapply(years[g], function(x){DF_phenmet_testarranged %>% filter(years == year_chars[g])})
   }
-x <- x - 1
+# x <- x - 1
 }
 
+
+rasterList <- brick()
 rasterList <- lapply(1:length(separated_rasters), function(x){rasterFromXYZ(separated_rasters[[x]][[1]])})
 
 rasterBrick <- brick(rasterList)
 
 plot(rasterBrick)
-
-rasterBrick2 <- rasterBrick
-
-
-#Replace numbers with years for the brick
-  
-library(gsubfn)
-j <- strapplyc(names(rasterBrick2), "\\.(\\d+)", simplify = TRUE)
-
-
-
-
-for(i in seq(unique(j))){
-names(rasterBrick2) <- gsub(pattern = c(".",i), replacement = yt[i], x= names(rasterBrick2))
-}
-
 
 
 # yt[1] <- as.character(years)
@@ -883,6 +872,29 @@ names(rasterBrick2) <- gsub(pattern = c(".",i), replacement = yt[i], x= names(ra
 # nrow(rast) <- 20
 # rast2 <- rasterize(DF_phenmet_sf$sos, rast,  fun=mean) 
 ```
+
+
+
+
+```{r}
+rasterBrick2 <- rasterBrick
+
+
+#Replace numbers with years for the brick
+  
+library(gsubfn)
+j <- strapplyc(names(rasterBrick2), "\\.(\\d+)", simplify = TRUE)
+
+
+
+
+for(i in seq(unique(j))){
+names(rasterBrick2) <- gsub(pattern = c(".",i), replacement = yt[i], x= names(rasterBrick2))
+}
+```
+
+
+
 
 Loop over 4 pixels, convert into sf object, then into raster 
 ```{r}
