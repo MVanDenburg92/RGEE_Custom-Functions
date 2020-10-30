@@ -688,10 +688,88 @@ ggplot() +
   geom_sf(data = eco_mask2, fill = "grey")+
   geom_sf(data= DF_phenmet_testarranged_sf)
 
-
+DF_phenmet_raster2 <- raster(DF_phenmet_testarranged)
 DF_phenmet_raster<- rasterFromXYZ(DF_phenmet_testarranged, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 
-plot(DF_phenmet_raster)
+DF_phenmet_raster2 <- raster(DF_phenmet_testarranged)
+
+
+DF_phenmet_raster3 <- list()
+
+for(i in nrow(DF_phenmet_testarranged)){
+  DF_phenmet_raster4 <- raster(DF_phenmet_testarranged_sf) %>% group_by(year)
+}
+
+
+install.packages("fasterize")
+library(fasterize)
+rast <- raster()
+
+s <- DF_phenmet_testarranged %>% filter(years == "2000")
+yt[1] <- as.character(years)
+
+separated_rasters <- list()
+x <- length(years)
+for(i in years){
+  for(g in seq(years)){
+   separated_rasters[[g]] <- lapply(years[g], function(x){DF_phenmet_testarranged %>% filter(years == yt[g])})
+  }
+x <- x - 1
+}
+
+rasterList <- lapply(1:length(separated_rasters), function(x){rasterFromXYZ(separated_rasters[[x]][[1]])})
+
+rasterBrick <- brick(rasterList)
+
+plot(rasterBrick)
+
+rasterBrick2 <- rasterBrick
+
+
+#Replace numbers with years for the brick
+  
+library(gsubfn)
+j <- strapplyc(names(rasterBrick2), "\\.(\\d+)", simplify = TRUE)
+
+
+
+
+for(i in seq(unique(j))){
+names(rasterBrick2) <- gsub(pattern = c(".",i), replacement = yt[i], x= names(rasterBrick2))
+}
+
+
+
+# yt[1] <- as.character(years)
+# s <- DF_phenmet_testarranged %>% filter(years == "2000")
+# separated_rasters <- list()
+# for(g in seq(years)){
+#    separated_rasters[[g]] <- lapply(yt[g], function(x){DF_phenmet_testarranged2 <- DF_phenmet_testarranged %>% filter(years == x)})
+#   }
+# 
+# 
+# separated_rasters <- list()
+# x <- length(years)
+#   for(g in years){
+#    separated_rasters[[1:length(years)]] <- DF_phenmet_testarranged %>% filter("years" == g)
+#    x <- x - 1
+#   }
+# x <- x - 1
+# }
+# 
+
+
+# DF_phenmet_raster6 <- rasterize(DF_phenmet_testarranged_sf,rast, field = c("sos","eos","los","pop","years") ,fun = "count", by = years)
+# }
+# 
+# rList <- list()
+# 
+# rasterList <- lapply(1:length(rList), function(x) raster(rList[[x]])
+# 
+# rasterBrick <- brick(rasterList)
+# 
+# 
+# plot(DF_phenmet_raster6)
 
 # 
 # xy.list <- split(coords, seq(nrow(coords)))
@@ -768,15 +846,15 @@ plot(DF_phenmet_raster)
 
 
 # extract variables of choice 
-sos <- as.numeric( Phen_2000_2007[["sos"]])
-str(sos)
-eos <-  as.numeric( Phen_2000_2007[["eos"]])
-str(eos)
-los <-  as.numeric( Phen_2000_2007[["los"]])
-str(los)
-pop <-  as.numeric( Phen_2000_2007[["pop"]])
-str(pop)
-
+# sos <- as.numeric( Phen_2000_2007[["sos"]])
+# str(sos)
+# eos <-  as.numeric( Phen_2000_2007[["eos"]])
+# str(eos)
+# los <-  as.numeric( Phen_2000_2007[["los"]])
+# str(los)
+# pop <-  as.numeric( Phen_2000_2007[["pop"]])
+# str(pop)
+# 
 
 
 # #coordinates for first pixel
