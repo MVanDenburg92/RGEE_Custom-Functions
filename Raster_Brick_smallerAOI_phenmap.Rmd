@@ -1,0 +1,249 @@
+---
+title: "Smaller_ecoregions"
+author: "Shreena  and Miles "
+date: "11/2/2020"
+output: html_document
+---
+
+Libraries Needed  
+```{r}
+library(greenbrown)
+library(sf)
+library(sp)
+library(tidyverse)
+library(raster)
+library(qdapRegex)
+library(lubridate)
+library(rgee)
+```
+
+Initialize GEE
+```{r}
+
+#ee_install()
+ee_Initialize(email = 'shreenapyakurel@gmail.com')
+```
+
+Run this ;ibrary after initalizing GEE
+```{r}
+library(reticulate)
+```
+
+Import Numpy module 
+```{r}
+np = import("numpy")
+```
+
+Load Ecoregion and convert into SF object 
+
+```{r}
+eco_mask2 <- st_read('Ecoregion_Small.shp',quiet = TRUE) %>% st_transform(4326) 
+eco_mask_ee2 <- sf_as_ee(eco_mask2)
+```
+
+Bring in Imagery from GEE and fiter by date and mask it to Ecoregion 
+```{r}
+s4 <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')
+s4 <-  s4$filterDate(ee$Date('2000-01-01'),ee$Date('2008-01-01'))$filterBounds(eco_mask_ee2)
+```
+
+Clip landsat image to AOI, select EVI band, get ingormation about collection 
+
+```{r}
+s4 = s4$map(function(image){image$clip(eco_mask_ee2)})
+
+#Selecting the EVI band which holds the information
+s4 = s4$select("EVI")
+
+#Get information about the collection 
+s4info <- s4$getInfo()
+```
+
+Create a loop to extract lat, long, and EVI values by first creating an empty list and a loop after 
+```{r}
+nimages2 <- s4$size()$getInfo()
+ic_date2 <- ee_get_date_ic(s4)
+s4_img_list <- list()
+latlng2 <- list()
+lats2 <- list()
+lngs2 <- list()
+evi_values4 <- list()
+s4_names <- list()
+evi_values5 <- list() #used to create numpy arrays later 
+
+
+#Loop
+for(i in seq_len(nimages2)) {
+  py_index <- i - 1
+  s4_img <- ee$Image(s4$toList(1, py_index)$get(0))
+  s4_name <- s4_img$get('system:index')$getInfo()
+  s4_names[[i]] <- s4_name
+  s4_img <- s4_img$select("EVI")$rename(s4_name)
+  s4_img_list[[i]] <- ee$Image$pixelLonLat()$addBands(s4_img)
+  s4_img_list[[i]] <-  s4_img_list[[i]]$reduceRegion(reducer = ee$Reducer$toList(),
+                                                        geometry  = eco_mask_ee2,
+                                                        maxPixels = 1e6,
+                                                        scale = 30,
+                                                        bestEffort = TRUE)
+}
+lats2 <-  np$array((ee$Array(s4_img_list[[1]]$get("latitude"))$getInfo()))
+lngs2 <- np$array((ee$Array(s4_img_list[[1]]$get("longitude"))$getInfo()))
+
+```
+
+convert from a GEE list to R object 
+```{r}
+#For loop to extract all the iamges from the s2_img_list list containing them and converting them to ee.List elements storing them in the evi_values2 list. 
+for(index in seq_len(nimages2)) {
+      evi_values4[[index]] <-  ee$List(s4_img_list[[index]]$get(s4_names[[index]]))$getInfo()
+      
+}
+
+
+#Convert list elements of evi_values into num py arrays
+evi_values5 <- lapply(evi_values4,function(x){
+  np$array((x))
+})
+
+
+#Create copy of evi values and rename the columns of the elements
+eviss4 <- evi_values5
+names(eviss4) <- ic_date2$id
+
+```
+
+Convert list to matrix and create dataframe out of the lats, longs, and evi values
+```{r}
+evis_df_s4 <- data.frame(x = lngs2,y = lats2,
+                         lapply(eviss4, "length<-", max(lengths(eviss4))))
+```
+
+For NA values in DF, take the average of month before and after 
+```{r}
+pos <- grep(pattern = "NA", x = evis_df_s4)
+while(length(pos)>0){
+  for(t in pos){
+    if(t < ncol(evis_df_s4)){
+    evis_df_s4[t] <- (evis_df_s4[t+1]-evis_df_s4[t-1])/2
+    }else
+    evis_df_s4[t] <- evis_df_s4[ncol(evis_df_s4)-1]
+  }
+  pos <- grep(pattern = "NA", x = evis_df_s4)
+}
+
+
+
+```
+
+Create a date vector for time serires 
+```{r}
+
+idcy <-  ic_date2$time_start
+dates <- ymd(idcy)
+
+names(evis_df_s4)[3:length(evis_df_s4)] <- as.character(dates)
+evis_df_s4_2 <- evis_df_s4 %>%
+   mutate_all(as.numeric)
+```
+
+create the raster
+```{r}
+XYZ_S4 <- rasterFromXYZ(evis_df_s4_2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+xyzstack <-  stack(XYZ_S4)
+plot(xyzstack)
+```
+
+Extract Phenology Metrics  create a lyst of timerseries vector for each pixel 
+```{r}
+all_pixels <- evis_df_s4_2 %>% 
+  select (-c(x, y)) %>%
+  arrange() %>% 
+  slice(1:nrow(evis_df_s4_2)) %>% 
+  t() 
+
+EVIseries <- ts(all_pixels, start=c(2000, 1), end=c(2007, 12), frequency=12)
+
+#Create copy of time series matrix to mess with
+yt <- EVIseries
+
+```
+
+Interpoloate daily for NA values
+```{r}
+#Create empty lists for lapply
+Yt_interpolate_m <- list()
+Yt_interpolate_m2 <- list()
+
+#Apply Tspp # time series pre-processing ---interpolating across whole data set.  Use lapply to retain time series information. 
+ww <- ncol(EVIseries)
+Yt_interpolate_m2 <- lapply(seq(ww), function(x){
+Yt_interpolate_m[[x]]  <- TsPP(EVIseries[,x], fpg = FillPermanentGaps, tsgf=TSGFspline)
+})
+
+
+plot(Yt_interpolate_m2[[1]] )
+```
+
+Calculate Phenology Metrics
+
+
+Extract years from dates
+```{r}
+#Extract years from dates 
+y <- data.frame(Date=(seq(dates[1], dates[length(dates)], by = 'year')))
+y$Year<-year(y$Date)
+years <- y$Year
+```
+
+Extract phenology metrics 
+```{r}
+Phen_2000_2007_2 <- list()
+for(i in seq(ww)){
+Phen_2000_2007_2[[i]] <- Phenology(Yt_interpolate_m2[[i]], approach="White")
+}
+plot(Phen_2000_2007_2[[1]] )
+```
+
+Greenbrown stores everything as list, extract variables of choice into list and into dataframe 
+```{r}
+sos <- list()
+eos <- list()
+los <- list()
+pop <- list()
+for(i in seq(ncol(EVIseries))){
+sos[[i]] <-  as.numeric( Phen_2000_2007_2[[i]][["sos"]])
+eos[[i]] <-  as.numeric( Phen_2000_2007_2[[i]][["eos"]])
+los[[i]] <-  as.numeric( Phen_2000_2007_2[[i]][["los"]])
+pop[[i]] <-  as.numeric( Phen_2000_2007_2[[i]][["pop"]])
+}
+sos <- unlist(sos)
+eos <- unlist(eos)
+los <- unlist(los)
+pop <- unlist(pop)
+coords <-evis_df_s4_2 %>% select(x, y) 
+coords2 <- coords %>% slice(rep(1:n(), each = 8))
+DF_phenmet_test <- data.frame(coords2,sos, eos, los, pop) %>% cbind(years)
+DF_phenmet_testarranged <- DF_phenmet_test %>% arrange(years)
+DF_phenmet_testarranged_sf = st_as_sf(DF_phenmet_testarranged, coords = c("x", "y"), crs = 4326)
+```
+
+Onvert into a raster Brick 
+```{r}
+rast <- raster()
+# s <- DF_phenmet_testarranged %>% filter(years == "2000")
+year_chars <- as.character(years)
+#year_chars[1]
+separated_rasters <- list()
+# x <- length(years)
+
+  for(g in seq(years)){
+   separated_rasters[[g]] <- lapply(years[g], function(x){DF_phenmet_testarranged %>% filter(years == year_chars[g])})
+  }
+
+
+rasterList <- brick()
+rasterList <- lapply(1:length(separated_rasters), function(x){rasterFromXYZ(separated_rasters[[x]][[1]])})
+rasterBrick <- brick(rasterList)
+plot(rasterBrick)
+```
+

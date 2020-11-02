@@ -11,8 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(greenbrown)
-library(sf)
-library(sp)
+library(geospaar)
 library(tidyverse)
 # devtools::install_github("rstudio/reticulate")
 
@@ -113,10 +112,6 @@ for(index in seq_len(nimages)) {
 
 evi_values<- evi_values2
 
-funny <- function(x){
-  np$array((x))
-}
-
 
 #Convert list elements of evi_values into num py arrays
 evi_values <- lapply(evi_values,function(x){
@@ -140,6 +135,23 @@ na_count <-sapply(evis_df, function(y) sum(length(which(is.na(y)))))
 evis_df2 <- evis_df %>%
    mutate_all(as.numeric)
 
+library(sp)
+library(rgdal)
+XYZ_SP <- rasterFromXYZ(evis_df2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+brick(XYZ_SP)
+
+phenmapsmall <- PhenologyRaster(XYZ_SP, start=c(2000, 1), freq=12, tsgf="TSGFspline", approach="Deriv")
+
+
+
+r <- raster(evis_df2)
+
+XYZ_SP <- rasterFromXYZ(evis_df2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+
+
+
+interpolate_DF <- TsPP(evis_df2, tsgf=TSGFspline)
+plot(Yt_interpolate)
 
 ```
 
@@ -158,11 +170,11 @@ pixelly[[i]] <- evis_df3 %>%
   t() 
 }
 
-eviiiii <-  lapply(nrow(evis_df3), function(x){
-  pixelly[[i]] <- evis_df3 %>%
-  arrange() %>% 
-  t()
-})
+# evi <-  lapply(nrow(evis_df3), function(x){
+#   pixelly[[i]] <- evis_df3 %>%
+#   arrange() %>% 
+#   t()
+# })
 
 pixel1 <- evis_df2 %>% 
   select (-c(x, y)) %>%
@@ -170,21 +182,24 @@ pixel1 <- evis_df2 %>%
   slice(1) %>% 
   t() 
 str(pixel1)
+
+
 #create time series 
 EVIseries <- ts(pixel1, start=c(2000, 1), end=c(2008, 1), frequency=12)
-yt <- NDVIseries
-plot(yt)
+
 
 # time series pre-processing ---interpolating 
 Yt_interpolate <- TsPP(EVIseries, tsgf=TSGFspline)
+
 plot(Yt_interpolate)
 
-#calculate metrics
+
+
 Phen_2000_2007 <- Phenology(Yt_interpolate, approach="White")
 plot(Phen_2000_2007)
 
 #just 2000
-x <- TsPP(yt, interpolate=TRUE)[1:365]
+x <- TsPP(EVIseries, interpolate=TRUE)[1:365]
 plot(x)
 
 # calculate phenology metrics for first year (2000)and plot graph
@@ -219,20 +234,16 @@ par(mar = c(0, 0, 0, 0))
 ggplot() +
   geom_sf(data = eco_mask2, fill = "grey")+
   geom_sf(data= DF_phenmet_sf, col = "blue")
+
+library(greenbrown)
+data(ndvi)
+
 #force into raster
 # rast <- raster()
 # extent(rast) <- extent(DF_phenmet_sf) # this might be unnecessary
 # ncol(rast) <- 20 # this is one way of assigning cell size / resolution
 # nrow(rast) <- 20
-# rast2 <- rasterize(DF_phenmet_sf$sos, rast,  fun=mean) 
-
-```
-
-Loop over 4 pixels, convert into sf object, then into raster 
-```{r}
-
-```
-
+# rast2 <- rasterize(DF_phenmet_sf$sos, rast,  fun=median) 
 
 ```
 

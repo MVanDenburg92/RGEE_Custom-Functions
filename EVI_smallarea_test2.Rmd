@@ -198,6 +198,7 @@ evis_df2 %>% mutate_if(purrr::compose(all,check.numeric),as.numeric)
 
 library(raster)
 XYZ_SP <- rasterFromXYZ(evis_df2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+brick(XYZ_SP)
 
 #plot raster brick 
 
@@ -205,15 +206,5 @@ XYZ_SP <- rasterFromXYZ(evis_df2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84
 
 Phenology 
 ```{r}
-phenmapsmall <- PhenologyRaster(XYZ_SP, start=c(2000, 1), freq=12, tsgf="TSGFspline", approach="Deriv")
-
-
-
-
-
-
-
-
-
-
-
+phenmapsmall <- PhenologyRaster(XYZ_SP, start=c(2000, 1), freq=12, tsgf="TSGFspline", approach="Deriv", checkseasonality = NULL)
+PhenologyRaster(XYZ_SP, start = c(2005, 1), freq = 12,  tsgf = "TSGFspline", interpolate = TRUE, check.seasonality = NULL)
