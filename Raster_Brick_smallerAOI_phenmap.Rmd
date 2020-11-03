@@ -20,7 +20,8 @@ library(rgee)
 Initialize GEE
 ```{r}
 
-#ee_install()
+ee_install()
+ee_clean_pyenv() 
 ee_Initialize(email = 'shreenapyakurel@gmail.com')
 ```
 
@@ -38,6 +39,7 @@ Load Ecoregion and convert into SF object
 
 ```{r}
 eco_mask2 <- st_read('Ecoregion_Small.shp',quiet = TRUE) %>% st_transform(4326) 
+plot(eco_mask_ee2)
 eco_mask_ee2 <- sf_as_ee(eco_mask2)
 ```
 
