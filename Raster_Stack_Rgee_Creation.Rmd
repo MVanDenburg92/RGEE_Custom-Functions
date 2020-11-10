@@ -21,14 +21,20 @@ library(raster)
 library(qdapRegex)
 library(lubridate)
 
+library(doParallel)  #Foreach Parallel Adaptor 
+library(foreach)
+library(parallel)
+
 # devtools::install_github("rstudio/reticulate")
 
 #Install if you don't have already
 # remotes::install_github("r-spatial/rgee")
+
+
 library(rgee)
 
 
-ee_install()
+# ee_install()
 ee_Initialize(email = 'miles.vandenburg@gmail.com')
 
 library(reticulate)
@@ -36,7 +42,7 @@ library(reticulate)
 # ee_check()
 
 # install.packages(c('processx','ps'))
-packageVersion('rgee')
+# packageVersion('rgee')
 # rgee::ee_check()
 # reticulate::py_config()
 
@@ -96,9 +102,13 @@ eco_mask <- st_read('Ecoregion.shp',quiet = TRUE) %>% st_transform(4326)
 
 eco_mask_ee <- sf_as_ee(eco_mask)
 
+plot(eco_mask)
+
 #Smaller ecoregion
 
 eco_mask2 <- st_read('Ecoregion_Small.shp',quiet = TRUE) %>% st_transform(4326) 
+
+plot(eco_mask2)
 # 
 eco_mask_ee2 <- sf_as_ee(eco_mask2)
 
@@ -110,7 +120,11 @@ Bring in the imagery from RGEE
 ```{r}
 s3 <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')
 
-s3 <-  s3$filterDate(ee$Date('2000-01-01'),ee$Date('2008-01-01'))$filterBounds(eco_mask_ee)
+
+start <- '2000-01-01'
+end <- '2008-01-01'
+
+s3 <-  s3$filterDate(ee$Date(start),ee$Date(end))$filterBounds(eco_mask_ee)
 
 
 
@@ -143,7 +157,8 @@ Same code but with smaller ecoregion
 ```{r}
 s4 <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')
 
-s4 <-  s4$filterDate(ee$Date('2000-01-01'),ee$Date('2008-01-01'))$filterBounds(eco_mask_ee2)
+
+s4 <-  s4$filterDate(ee$Date(start),ee$Date(end))$filterBounds(eco_mask_ee2)
 
 
 
@@ -261,7 +276,7 @@ lngs  <- np$array((ee$Array(s2_img_list[[1]]$get("longitude"))$getInfo()))
 
 
 
-
+## SMALLER REGIONS
 
 Get setup for the loop.  In case the loop crashes or doesn't work, you must rerun the above chunk first before running this chunk again. 
 ```{r}
@@ -279,6 +294,28 @@ s4_names <- list()
 evi_values5 <- list()
 evi_values6 <- list()
 
+
+
+UseCores <- detectCores() - 4
+
+
+#Register CoreCluster
+cl <- makeCluster(UseCores)
+registerDoParallel(cl)
+
+#Use foreach loop and %dopar% command
+system.time(Yt_interpolate_m2 <- foreach(i=1:length(evisti)) %dopar% {
+  
+library(greenbrown)
+  
+Yt_interpolate_m[[i]]  <- TsPP(evisti[[i]], tsgf=TSGFspline)
+
+}
+)
+
+getDoParWorkers()
+registerDoSEQ()
+stopCluster(cl)
 
 # s2_img_list[[15]]$getInfo()
 
@@ -353,7 +390,7 @@ lngs2 <- np$array((ee$Array(s4_img_list[[1]]$get("longitude"))$getInfo()))
 
 
 
-Obtain the EVI values and clean the results of the google earth engine list
+Obtain the EVI values and clean the results of the google earth engine list -- LARGER IMAGE
 ```{r}
 
 #For loop to extract all the iamges from the s2_img_list list containing them and converting them to ee.List elements storing them in the evi_values2 list. 
@@ -361,6 +398,7 @@ for(index in seq_len(nimages)) {
       evi_values2[[index]] <-  ee$List(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()
       
 }
+
 
 evi_values<- evi_values2
 
@@ -390,70 +428,15 @@ names(evis) <- ic_date$id
 ```
 
 
-Same code as aabove but for smaller region
-
-```{r}
-
-#For loop to extract all the iamges from the s2_img_list list containing them and converting them to ee.List elements storing them in the evi_values2 list. 
-
-for(index in seq_len(nimages2)) {
-      evi_values4[[index]] <-  ee$List(s4_img_list[[index]]$get(s4_names[[index]]))$getInfo()
-      
-}
-
-# evi_values5 <- evi_values4
-
-funny <- function(x){
-  np$array((x))
-}
 
 
-#Convert list elements of evi_values into num py arrays
-evi_values5 <- lapply(evi_values4,function(x){
-  np$array((x))
-})
-
-
-
-
-
-#Lapply method -- takes same amount of time 1:37 for 36 images. 
-# evi_values4 <- list()
-# evi_values5 <- lapply(seq_len(nimages),function(x){
-#   evi_values4[[x]] <-  ee$List(s2_img_list[[x]]$get(s2_names[[x]]))$getInfo()
-# })
-# 
-# 
-
-
-#Create copy of evi values and rename the columns of the elements
-eviss4 <- evi_values5
-names(eviss4) <- ic_date2$id
-```
-
-
-
-Convert list to matrix and create dataframe out of the lats, longs, and evi values
-
+Create Dataframe for Larger Ecoregion; average the columns with NA values; and rename the columns; 
 
 ```{r}
 
 # names(evi_tester) <- ic_date$id
 
 evis_df <- data.frame(x = lngs,y = lats,lapply(evis, "length<-", max(lengths(evis))))
-
-XYZ_2 <- raster::rasterFromXYZ(evis_df, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
-
-```
-
-Same code as above but smaller eco region
-
-
-```{r}
-
-# names(evi_tester) <- ic_date$id
-
-evis_df_s4 <- data.frame(x = lngs2,y = lats2,lapply(eviss4, "length<-", max(lengths(eviss4))))
 
 #Averaging function to fill in missing values
 # evis_df_s4[29]
@@ -477,28 +460,8 @@ evis_df_s4 <- data.frame(x = lngs2,y = lats2,lapply(eviss4, "length<-", max(leng
 #     evis_df_s4[pos[i]] <- evis_df_s4[ncol(evis_df_s4)]
 # } else
 #   print(evis_df_s4)
-pos <- grep(pattern = "NA", x = evis_df_s4)
-while(length(pos)>0){
-  for(t in pos){
-    if(t < ncol(evis_df_s4)){
-    evis_df_s4[t] <- (evis_df_s4[t+1]-evis_df_s4[t-1])/2
-    }else
-    evis_df_s4[t] <- evis_df_s4[ncol(evis_df_s4)-1]
-  }
-  pos <- grep(pattern = "NA", x = evis_df_s4)
 
-}
-
-#Test out final column
-evis_df_s4[96]
-
-
-# grep(pattern = "NA", x = evis_df_s4)
-# is.na(evis_df_s4)
-  
-  
-# grep(pattern = "-", x = ic_date2[2])
-idcy <-  ic_date2$time_start
+idcy <-  ic_date$time_start
 dates <- ymd(idcy)
 
 # correct_dates <- seq(dates[1], dates[length(dates)], by = 'year')
@@ -507,28 +470,122 @@ dates <- ymd(idcy)
 
 #add reformatted dates
 
-names(evis_df_s4)[3:length(evis_df_s4)] <- as.character(dates)
-evis_df_s4_2 <- evis_df_s4 %>%
+names(evis_df)[3:length(evis_df)] <- as.character(dates)
+evis_df_2 <- evis_df %>%
    mutate_all(as.numeric)
 
 
-evis_df_s4_2 <- evis_df_s4 %>%
+coords <- evis_df_2 %>% select(x, y) 
+
+
+evis_df_tester <- evis_df_2 %>% select (-c(x, y))
+
+
+evis_df_tester[evis_df_tester < 0] = 0
+
+evis_df_tester <- data.frame(coords,evis_df_tester)
+
+
+
+
+
+######################################################################
+
+pos <- grep(pattern = "NA", x = evis_df)
+
+while(length(pos)>0){
+  for(t in posi){
+    if(t < ncol(evis_df)){
+    evis_df[t] <- (evis_df[t+1]-evis_df[t-1])/2
+    }else
+    evis_df[t] <- evis_df[ncol(evis_df)-1]
+  }
+  pos <- grep(pattern = "NA", x = evis_df)
+
+}
+
+qq <- which(is.na(evis_df))
+
+indx <- which(is.na(evis_df), arr.ind=TRUE)
+evis_df[indx] <- cM[indx[,2]]
+
+
+
+for(i in 1:ncol(evis_df_tester)){
+  evis_df_tester[,i]=ifelse(is.na(evis_df_tester[,i]),
+                  ave(evis_df_tester[,i],FUN=function(y) mean(y, na.rm = TRUE)),
+                  evis_df_tester[,i])
+}
+
+
+
+
+
+while(is.na(evis_df)){
+  for(t in posi){
+    if(is.na(evis_df) == FALSE){
+    evis_df[t] <- (evis_df[t+1]-evis_df[t-1])/2
+    }else
+    evis_df[t] <- evis_df[ncol(evis_df)-1]
+  }
+  # pos <- grep(pattern = "NA", x = evis_df)
+
+}
+
+
+
+
+
+
+
+
+
+
+#Test out final column
+evis_df[96]
+
+# posi <- c(7,9,14,17,19,21,25,28,29,40,43,47,50,51,55,56,61,73,74,75,77,90,91,96)
+
+# grep(pattern = "NA", x = evis_df_s4)
+is.na(evis_df)
+  
+  
+# grep(pattern = "-", x = ic_date2[2])
+idcy <-  ic_date$time_start
+dates <- ymd(idcy)
+
+# correct_dates <- seq(dates[1], dates[length(dates)], by = 'year')
+
+# correct_dates <- seq(ymd('2000-01-01'),ymd('2003-12-01'),by='months')
+
+#add reformatted dates
+
+names(evis_df)[3:length(evis_df)] <- as.character(dates)
+evis_df_2 <- evis_df %>%
    mutate_all(as.numeric)
+
+
+# evis_df_s4_2 <- evis_df_s4 %>%
+#    mutate_all(as.numeric)
 
 # seq(ymd('2000-01-01'),ymd('2003-12-01'),by='months')
 ```
 
+Convert list to matrix and create dataframe out of the lats, longs, and evi values
 
-### Step to create the raster
 
 ```{r}
 
-XYZ_S4 <- rasterFromXYZ(evis_df_s4_2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
-xyzstack <-  stack(XYZ_S4)
+# names(evi_tester) <- ic_date$id
+
+# evis_df <- data.frame(x = lngs,y = lats,lapply(evis, "length<-", max(lengths(evis))))
+
+XYZ_2 <- raster::rasterFromXYZ(evis_df_tester, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 
 ```
 
-**Greenbrown**
+
+**Greenbrown** Larger Region
 ```{r}
 #phenology for  1 pixel
 #select 1 pixel 
@@ -546,10 +603,10 @@ xyzstack <-  stack(XYZ_S4)
 #   t()
 # })
 
-all_pixels <- evis_df_s4_2 %>% 
+all_pixels <- evis_df_tester %>% 
   select (-c(x, y)) %>%
   arrange() %>% 
-  slice(1:nrow(evis_df_s4_2)) %>% 
+  slice(1:nrow(evis_df_tester)) %>% 
   t() 
 
 # str(all_pixels)
@@ -560,7 +617,7 @@ all_pixels <- evis_df_s4_2 %>%
 
 EVIseries <- ts(all_pixels, start=c(2000, 1), end=c(2007, 12), frequency=12)
 
-
+evisti <- as.list(EVIseries)
 
 
 # matrix1 <- matrix() 
@@ -596,7 +653,7 @@ yt <- EVIseries
 # })
 
 
-tii <- seq(1,ncol(EVIseries))
+# tii <- seq(1,ncol(EVIseries))
 
 
 #Create empty lists for lapply
@@ -606,9 +663,37 @@ Yt_interpolate_m2 <- list()
 
 #Apply Tspp # time series pre-processing ---interpolating across whole data set.  Use lapply to retain time series information. 
 ww <- ncol(EVIseries)
-Yt_interpolate_m2 <- lapply(seq(ww), function(x){
+
+
+
+# www <- EVIseries[,1]
+# Yt_interpolate_m2 <- 
+                            
+  # funny <- function(x){
+#   np$array((x))
+# }
+                          
+                            
+# Yt_interpolate_m2 <- lapply(seq(ww),funny)
+  
+Yt_interpolate_m2 <- lapply(seq(ww),function(x){
 Yt_interpolate_m[[x]]  <- TsPP(EVIseries[,x], tsgf=TSGFspline)
 })
+
+# #lapply(seq(ww),function(x){
+# Yt_interpolate_m[[x]]  <- TsPP(EVIseries[,x], tsgf=TSGFspline)
+# })
+
+
+# phenmap <- clusterR(xyzstack, fun=PhenologyRaster, args=list(start = stDate, freq = 12, tsgf=TSGFspline, approach="Deriv", interpolate = TRUE))
+
+
+# IsPermanentGap(yt)
+# > fill <- FillPermanentGaps(ndvi2) 
+
+
+
+# plot(Yt_interpolate_m2[1])
 
 # for(i in seq(ww)){
 # Yt_interpolate_m[[i]] <- TsPP(EVIseries[,i], tsgf=TSGFspline)
@@ -673,7 +758,7 @@ los <- unlist(los)
 pop <- unlist(pop)
 
 
-coords <-evis_df_s4_2 %>% select(x, y) 
+coords <-evis_df_2 %>% select(x, y) 
 coords2 <- coords %>% slice(rep(1:n(), each = 8))
 
 
@@ -703,9 +788,11 @@ DF_phenmet_testarranged_sf = st_as_sf(DF_phenmet_testarranged, coords = c("x", "
 # 
 # install.packages("fasterize")
 # library(fasterize)
-rast <- raster()
+# rast <- raster()
 
 # s <- DF_phenmet_testarranged %>% filter(years == "2000")
+
+
 
 
 year_chars <- as.character(years)
@@ -713,20 +800,991 @@ year_chars <- as.character(years)
 
 separated_rasters <- list()
 # x <- length(years)
-for(i in years){
-  for(g in seq(years)){
+
+for(g in seq(years)){
    separated_rasters[[g]] <- lapply(years[g], function(x){DF_phenmet_testarranged %>% filter(years == year_chars[g])})
-  }
-# x <- x - 1
 }
 
-
+DF_phenmet_testarranged %>% filter(years == year_chars[1])
 rasterList <- brick()
 rasterList <- lapply(1:length(separated_rasters), function(x){rasterFromXYZ(separated_rasters[[x]][[1]])})
 
 rasterBrick <- brick(rasterList)
 
 plot(rasterBrick)
+
+
+# yt[1] <- as.character(years)
+# s <- DF_phenmet_testarranged %>% filter(years == "2000")
+# separated_rasters <- list()
+# for(g in seq(years)){
+#    separated_rasters[[g]] <- lapply(yt[g], function(x){DF_phenmet_testarranged2 <- DF_phenmet_testarranged %>% filter(years == x)})
+#   }
+# 
+# 
+# separated_rasters <- list()
+# x <- length(years)
+#   for(g in years){
+#    separated_rasters[[1:length(years)]] <- DF_phenmet_testarranged %>% filter("years" == g)
+#    x <- x - 1
+#   }
+# x <- x - 1
+# }
+# 
+
+
+# DF_phenmet_raster6 <- rasterize(DF_phenmet_testarranged_sf,rast, field = c("sos","eos","los","pop","years") ,fun = "count", by = years)
+# }
+# 
+# rList <- list()
+# 
+# rasterList <- lapply(1:length(rList), function(x) raster(rList[[x]])
+# 
+# rasterBrick <- brick(rasterList)
+# 
+# 
+# plot(DF_phenmet_raster6)
+
+# 
+# xy.list <- split(coords, seq(nrow(coords)))
+# 
+# xy.list2 <- as.list(as.data.frame(t(coords)))
+# 
+# coords2 <- coords %>% slice(rep(1:n(), each = 8))
+# 
+
+
+
+# (tii[i],Phen_2000_2007_2[[i]][["sos"]], years) %>% group_by(years)
+
+
+# sos <- rbind(sos, new.baskets)
+# 
+# 
+# 
+# str(sos)
+# eos <-  as.numeric( Phen_2000_2007_2[["eos"]])
+# str(eos)
+# los <-  as.numeric( Phen_2000_2007_2[["los"]])
+# str(los)
+# pop <-  as.numeric( Phen_2000_2007_2[["pop"]])
+# str(pop)
+# 
+# data.frame(coords, sos, eos, los, pop) %>% cbind(years) 
+# 
+
+
+
+
+# 
+# plot(Phen_2000_2007)
+# #just 2000
+# x <- TsPP(EVIseries[,1], interpolate=TRUE)[1:365]
+# plot(x)
+# # calculate phenology metrics for first year (2000)and plot graph
+#  PhenoDeriv(x, plot=TRUE, xlab = "Day Of Year", ylab = "EVI")
+# #Plots SOS, EOS, POP, LOS
+# plot(Phen_2000_2007[["sos"]])
+# plot(Phen_2000_2007[["eos"]])
+# plot(Phen_2000_2007[["pop"]])
+# plot(Phen_2000_2007[["los"]])
+
+
+#Calculate metrics for whole matrix
+
+# ww2 <- ncol(Yt_interpolate_m2)
+# 
+# Phen_2000_2007_matrix <- sapply(seq(ww2), function(x){
+# Yt_interpolate_m[[x]]  <- TsPP(EVIseries[,x], tsgf=TSGFspline)
+# Phenology(Yt_interpolate_m2, approach="White")
+# })
+# 
+
+# 
+# Phen_2000_2007 <- Phenology(Yt_interpolate, approach="White")
+# plot(Phen_2000_2007)
+# #just 2000
+# 
+# sos <- as.numeric( Phen_2000_2007[["sos"]])
+# str(sos)
+# eos <-  as.numeric( Phen_2000_2007[["eos"]])
+# str(eos)
+# los <-  as.numeric( Phen_2000_2007[["los"]])
+# str(los)
+# pop <-  as.numeric( Phen_2000_2007[["pop"]])
+# str(pop)
+# 
+# 
+# 
+# 
+
+
+# extract variables of choice 
+# sos <- as.numeric( Phen_2000_2007[["sos"]])
+# str(sos)
+# eos <-  as.numeric( Phen_2000_2007[["eos"]])
+# str(eos)
+# los <-  as.numeric( Phen_2000_2007[["los"]])
+# str(los)
+# pop <-  as.numeric( Phen_2000_2007[["pop"]])
+# str(pop)
+# 
+
+
+# #coordinates for first pixel
+# coords <-evis_df_s4_2 %>% select(x, y) %>% slice(1)
+# # y<-data.frame(Date=(seq(as.Date('2000/01/01'),as.Date('2008/01/01'), by="year")))   #create the year column
+# 
+# # y$Year<-year(y$Date)
+# # years <- y$Year
+# 
+# y <- data.frame(Date=(seq(dates[1], dates[length(dates)], by = 'year')))
+# y$Year<-year(y$Date)
+# years <- y$Year
+# 
+# #Dataframe
+# DF_phenmet <- data.frame(coords, sos, eos, los, pop) %>% cbind(years) 
+# #convert into SF object 
+# DF_phenmet_sf = st_as_sf(DF_phenmet, coords = c("x", "y"), crs = 4326)
+# par(mar = c(0, 0, 0, 0))
+# ggplot() +
+#   geom_sf(data = eco_mask2, fill = "grey")+
+#   geom_sf(data= DF_phenmet_sf, col = "blue")
+#force into raster
+# rast <- raster()
+# extent(rast) <- extent(DF_phenmet_sf) # this might be unnecessary
+# ncol(rast) <- 20 # this is one way of assigning cell size / resolution
+# nrow(rast) <- 20
+# rast2 <- rasterize(DF_phenmet_sf$sos, rast,  fun=mean) 
+```
+
+
+Parallel Processing
+
+    The seasonality-calculation will take advantage of all CPU cores. The PC might lag during the process and may not be usable for other tasks in a productive way
+    If you want to keep using your PC during the process, reduce the number of used cores by one. To do this, replace max(as.numeric(Sys.getenv(‘NUMBER_OF_PROCESSORS’)),1) with max(as.numeric(Sys.getenv(‘NUMBER_OF_PROCESSORS’))-1,1) in the following line.
+
+
+
+```{r}
+library(doParallel)  #Foreach Parallel Adaptor 
+library(foreach)
+library(parallel)
+
+
+#Create empty lists for lapply
+Yt_interpolate_m <- list()
+Yt_interpolate_m2 <- list()
+
+
+#Apply Tspp # time series pre-processing ---interpolating across whole data set.  Use lapply to retain time series information. 
+ww <- ncol(EVIseries)
+
+# rasterOptions()
+
+UseCores <- detectCores() - 4
+
+
+#Register CoreCluster
+cl <- makeCluster(UseCores)
+registerDoParallel(cl)
+
+
+library(raster)
+
+#Use foreach loop and %dopar% command
+system.time(Yt_interpolate_m2 <- foreach(i=1:ww) %dopar% {
+  
+library(greenbrown)
+  
+Yt_interpolate_m[[i]]  <- TsPP(EVIseries[,i], tsgf=TSGFspline)
+
+}
+)
+
+
+
+
+
+UseCores <- detectCores() - 2
+
+
+#Register CoreCluster
+cl <- makeCluster(UseCores)
+registerDoParallel(cl)
+
+#Use foreach loop and %dopar% command
+system.time(Yt_interpolate_m2 <- foreach(i=1:length(evisti)) %dopar% {
+  
+library(greenbrown)
+  
+Yt_interpolate_m[[i]]  <- TsPP(evisti[[i]], tsgf=TSGFspline)
+
+}
+)
+
+getDoParWorkers()
+registerDoSEQ()
+stopCluster(cl)
+
+
+#47.2 minutes or 2832 seconds using 4 cors
+
+
+
+#The following time using 6 cores
+ #   user  system elapsed 
+ # 290.05  358.17 2229.38 
+
+
+
+
+
+#ytmm <- Yt_interpolate_m2
+
+#ytmm is the results 
+
+library(bigstatsr)
+
+
+system.time(
+  big_apply(EVIseries, a.FUN = function(X, ind) {
+    print(min(ind))
+    X[, ind] <- apply(X[, ind], 2, sample)
+    NULL
+  }, a.combine = 'c', ncores = nb_cores())
+) # 27 sec
+
+
+###################################################################################
+library(bigstatsr)
+
+UseCores <- detectCores() - 2
+
+
+biggy <- bigstatsr:::CutBySize(ncol(EVIseries), nb = UseCores)
+
+biggy <- bigstatsr:::CutBySize(length(evisti), nb = UseCores)
+
+
+
+
+blocks <- c(round(seq(1, ncol(EVIseries), ncol(EVIseries) / 4)), ncol(EVIseries))
+blocks <- cbind(blocks[-length(blocks)], blocks[-1])
+
+
+  ind <- blocks[i, ]
+  gedi_block <-  EVIseries[ind[1]:ind[2]]
+  gedi_dist <- Yt_interpolate_m[[gedi_block]]  <- TsPP(EVIseries[,gedi_block], tsgf=TSGFspline)
+
+
+biggy <- biggy[]
+
+#Register CoreCluster
+cl <- makeCluster(UseCores)
+registerDoParallel(cl)
+clusterExport(cl, c("EVIseries","Yt_interpolate_m2", "Yt_interpolate_m"))
+clusterEvalQ(cl, c(library(greenbrown), library(bigstatsr), library(foreach)))
+
+# eee <- bigstatsr:::seq2(biggy[1,])
+system.time(
+hhhhh <- foreach(i = 1:UseCores) %:% 
+  foreach(a=bigstatsr:::seq2(biggy[i,]))  %dopar% {
+  Yt_interpolate_m[[a]]  <- TsPP(EVIseries[,a], tsgf=TSGFspline)
+})
+
+
+ #   user  system elapsed 
+ # 331.57  174.42 1919.44
+
+
+
+stopImplicitCluster()
+    
+    ind <- blocks[1, ] %dopar% {
+# gedi_block <-  EVIseries[ind[1]:ind[2]]
+  
+  
+ind <- bigstatsr:::seq2(biggy[1,])
+as.numeric(ind)
+# hh <- evisti[[ind]]
+# eef <- hh[,ind]
+
+
+
+Yt_interpolate_m[[ind]]  <- TsPP(evisti[[ind]], tsgf=TSGFspline)
+}
+
+
+########################################################################
+
+x <-
+  foreach(b=bvec, .combine='cbind') %:%
+    foreach(a=avec, .combine='c') %dopar% {
+      sim(a, b)
+    }
+x
+
+
+
+
+class(ee)
+
+
+v <-  seq(ww)
+
+
+
+###################################################################################
+
+blocks <- c(round(seq(1, ncol(EVIseries), ncol(EVIseries) / 4)), ncol(EVIseries))
+blocks <- cbind(blocks[-length(blocks)], blocks[-1])
+
+
+# parallelize in 8 chunks
+registerDoParallel(4)
+getDoParWorkers()
+registerDoSEQ()
+stopCluster(cl)
+
+
+cl <- detectCores() - 2
+
+ewq <- as_tibble(EVIseries)
+
+doParallel::registerDoParallel(cl)
+
+system.time(
+  gedi_rdist <- foreach(i = 1:nrow(blocks), .combine = "cbind", .packages = "greenbrown") %dopar% {
+  ind <- blocks[i, ]
+  gedi_block <-  EVIseries[ind[1]:ind[2]]
+  gedi_dist <- Yt_interpolate_m[[gedi_block]]  <- TsPP(EVIseries[,gedi_block], tsgf=TSGFspline)
+}
+)
+#Error in { : task 1 failed - "TsPP: Yt should be class of 'ts'."
+
+
+##############################################################################
+
+blocks <- c(round(seq(1, nrow(gedi_key), nrow(gedi_key) / 36)), nrow(gedi_key))
+blocks <- cbind(blocks[-length(blocks)], blocks[-1])
+
+# parallelize in 8 chunks
+
+
+cores <- detectCores()
+cores[1]
+#Create cluster with desired number of cores, leave one open for the machine         
+#core processes
+cl <- makeCluster(cores[1]-5)
+#Register cluster
+registerDoParallel(cl)
+
+#Check processsing times
+rasterOptions()
+
+cl <- makeCluster(cores[1]-5)
+getDoParWorkers()
+stopCluster(cl)
+
+doParallel::registerDoParallel(cl)
+system.time(
+  gedi_rdist <- foreach(i = 1:nrow(blocks), .combine = "rbind", .packages = "dplyr", .export = c("blocks","roads_uni","gedi_key")) %dopar% {
+  ind <- blocks[i, ]
+  gedi_block <- gedi_key %>% dplyr::slice(ind[1]:ind[2])
+  
+  gedi_dist <- gedi_block %>% dplyr::mutate(roaddist = sf::st_distance(., roads_uni))}
+)
+
+##############################################################################
+
+ncol(EVIseries)
+system.time(a <- lapply(x.list, model.mse))
+# lapply(seq(ww),
+
+ww <- ncol(EVIseries)
+
+
+model.mse <- function(x){
+Yt_interpolate_m[[x]]  <- greenbrown::TsPP(EVIseries[,x], tsgf=TSGFspline)
+}
+
+
+clusterApply(cl, library(greenbrown))
+clusterEvalQ(cl, library("greenbrown"))
+clusterCall(clust, function() library(greenbrown))
+
+
+
+UseCores <- detectCores() - 1
+
+
+psock <- parallel::makePSOCKcluster(UseCores)
+
+#Using psock
+   # user  system elapsed 
+   # 3.79    8.89 1614.59 
+
+
+system.time({
+  clust <- makeCluster(UseCores)
+  clusterEvalQ(clust, library("greenbrown"))
+  clusterExport(clust, c("EVIseries","Yt_interpolate_m2", "Yt_interpolate_m"))
+  a <- parLapply(clust, seq(ww), model.mse)})
+
+
+
+stopCluster(clust)
+
+#Using clust and makecluster 
+#user  system elapsed 
+# 3.27  9.67 1559.99 or 25.98333333333333 minutes using 6 cores
+
+
+
+
+#Using clust nd makeCluster with 7 cores
+   # user  system elapsed 
+   # 4.58    7.52 1781.42 
+
+EVIseries
+
+stopCluster(clust)
+
+a_parlapply <- a
+
+
+############################################################################
+library(bigstatsr)
+mat3 <- as_FBM(EVIseries)
+
+ww <- ncol(EVIseries)
+
+
+model.mse <- function(x){
+Yt_interpolate_m[[x]]  <- greenbrown::TsPP(EVIseries[,x], tsgf=TSGFspline)
+}
+
+
+
+cl <- parallel::makeCluster(2)
+doParallel::registerDoParallel(cl)
+tmp3 <- foreach(j = 1:8, .combine = 'c') %:%
+  foreach(i = 1:5, .combine = 'c') %dopar% {
+    mat3[i, j] <- i + j
+    NULL
+  }
+
+
+
+
+parallel::stopCluster(cl)
+mat3[]
+
+ind <- seq(ncol(EVIseries))
+ind <- as.numeric(ind)
+
+
+col_results <-  big_apply(mat3, a.FUN = function(X, ind) greenbrown::TsPP(X[,ind], tsgf=TSGFspline), ncores = 4)
+
+
+
+
+system.time(a <- lapply(x.list, model.mse))
+# lapply(seq(ww),
+
+model.mse <- function(x){
+Yt_interpolate_m[[x]]  <- greenbrown::TsPP(EVIseries[,x], tsgf=TSGFspline)
+}
+
+
+#################################################################################################
+
+# #Use foreach loop and %dopar% command
+# foreach(i=1:ww) %dopar% {
+#   
+# library(greenbrown)
+#   
+# Yt_interpolate_m2 <- lapply(i,funny)
+# 
+# }
+# 
+# 
+
+
+
+#Create empty lists for lapply
+Yt_interpolate_m <- list()
+Yt_interpolate_m2 <- list()
+
+
+#Apply Tspp # time series pre-processing ---interpolating across whole data set.  Use lapply to retain time series information. 
+ww <- ncol(EVIseries)
+
+# Yt_interpolate_m2 <- 
+                            
+  # funny <- function(x){
+#   np$array((x))
+# }
+                          
+                            
+Yt_interpolate_m2 <- lapply(seq(ww),funny)
+  
+Yt_interpolate_m2 <- lapply(seq(ww),function(x){
+Yt_interpolate_m[[x]]  <- TsPP(EVIseries[,x], tsgf=TSGFspline)
+})
+
+
+#end cluster
+stopCluster(cl)
+
+function (m, block.size, nb = ceiling(m/block.size)) 
+## \\{
+##     if (nb > m) 
+##         nb <- m
+##     int <- m/nb
+##     upper <- round(1:nb * int)
+##     lower <- c(1, upper[-nb] + 1)
+##     size <- c(upper[1], diff(upper))
+##     cbind(lower, upper, size)
+## }
+
+
+install.packages("bigstatsr")
+library(bigstatsr)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+Start multicore processing
+
+```{r}
+install.packages("snow")
+library(snow)
+no_cores <- max(as.numeric(Sys.getenv('NUMBER_OF_PROCESSORS')),1)
+no_cores <- no_cores - 4
+print(paste0(Sys.time()," Seasonality calculation (this will take a while; Step 5 of 6)"))
+beginCluster(no_cores)
+```
+
+
+
+
+Seasonality calculation
+```{r}
+#Check the greenbrown-package documentation at http://greenbrown.r-forge.r-project.org/ and the "in detail" page for more information on the calculation
+
+stDate <- c(as.numeric(min(years)),01,01)
+
+plot(XYZ_2)
+
+beginCluster(6)
+phenmap <- clusterR(XYZ_2, fun=greenbrown:::PhenologyRaster, args=list(start = stDate, freq = 12, tsgf=TSGFspline, approach="Deriv", interpolate = TRUE))
+endCluster()
+
+
+phenmap <- PhenologyRaster(XYZ_2, start=stDate, freq=12, tsgf = "TSGFlinear", approach="Trs")
+
+
+
+
+
+```
+
+
+Ending multi-core processing
+
+```{r}
+endCluster()
+```
+
+
+
+Output Phenology
+```{r}
+dir.create(paste0(dataPath,'/season/'))
+n <- NamesPhenologyRaster(phenmap, start=as.numeric(years[1]))
+for (i in 1:nlayers(phenmap)){
+  writeRaster(phenmap[[i]],filename=paste0(dataPath,"/season/",n[i],".tif"),format="GTiff",overwrite=T)
+}
+
+plot(phenmap)
+```
+
+
+
+
+
+
+
+
+
+
+For smaller region: Obtain the EVI values and clean the results of the google earth engine list
+
+
+```{r}
+
+#For loop to extract all the iamges from the s2_img_list list containing them and converting them to ee.List elements storing them in the evi_values2 list. 
+
+for(index in seq_len(nimages2)) {
+      evi_values4[[index]] <-  ee$List(s4_img_list[[index]]$get(s4_names[[index]]))$getInfo()
+      
+}
+
+# evi_values5 <- evi_values4
+
+# funny <- function(x){
+#   np$array((x))
+# }
+
+
+#Convert list elements of evi_values into num py arrays
+evi_values5 <- lapply(evi_values4,function(x){
+  np$array((x))
+})
+
+
+
+
+
+#Lapply method -- takes same amount of time 1:37 for 36 images. 
+# evi_values4 <- list()
+# evi_values5 <- lapply(seq_len(nimages),function(x){
+#   evi_values4[[x]] <-  ee$List(s2_img_list[[x]]$get(s2_names[[x]]))$getInfo()
+# })
+# 
+# 
+
+
+#Create copy of evi values and rename the columns of the elements
+eviss4 <- evi_values5
+names(eviss4) <- ic_date2$id
+```
+
+
+
+Create Dataframe for Smaller Ecoregion; average the columns with NA values; and rename the columns; 
+
+```{r}
+
+# names(evi_tester) <- ic_date$id
+
+evis_df_s4 <- data.frame(x = lngs2,y = lats2,lapply(eviss4, "length<-", max(lengths(eviss4))))
+
+#Averaging function to fill in missing values
+# evis_df_s4[29]
+#   pos <- grep(pattern = "NA", x = evis_df_s4)
+#   evis_df_s4[pos] <- (evis_df_s4[96+1]-evis_df_s4[96-1])/2
+# 
+#   
+# i <- 1
+# while(length(pos) > 0)
+# 
+# i <- length(pos)
+# 
+#   
+# if(length(pos) > 0){
+#   evis_df_s4[pos[i]] <- (evis_df_s4[pos[i]+1]-evis_df_s4[pos[i]-1])/2
+#   i <- i+1
+#   pos <- grep(pattern = "NA", x = evis_df_s4)
+# 
+#   
+# } else if(pos == ncol(evis_df_s4)){
+#     evis_df_s4[pos[i]] <- evis_df_s4[ncol(evis_df_s4)]
+# } else
+#   print(evis_df_s4)
+pos <- grep(pattern = "NA", x = evis_df_s4)
+while(length(pos)>0){
+  for(t in pos){
+    if(t < ncol(evis_df_s4)){
+    evis_df_s4[t] <- (evis_df_s4[t+1]-evis_df_s4[t-1])/2
+    }else
+    evis_df_s4[t] <- evis_df_s4[ncol(evis_df_s4)-1]
+  }
+  pos <- grep(pattern = "NA", x = evis_df_s4)
+
+}
+
+
+
+
+
+coords3 <-evis_df_s4 %>% select(x, y) 
+
+evis_df_s4 <- evis_df_s4 %>% select (-c(x, y))
+
+
+evis_df_s4[evis_df_s4 < 0] = 0
+
+evis_df_s4_2 <- data.frame(coords3,evis_df_s4)
+#Test out final column
+# evis_df_s4[96]
+
+
+# grep(pattern = "NA", x = evis_df_s4)
+# is.na(evis_df_s4)
+  
+  
+# grep(pattern = "-", x = ic_date2[2])
+idcy <-  ic_date2$time_start
+dates <- ymd(idcy)
+
+# correct_dates <- seq(dates[1], dates[length(dates)], by = 'year')
+
+# correct_dates <- seq(ymd('2000-01-01'),ymd('2003-12-01'),by='months')
+
+#add reformatted dates
+
+names(evis_df_s4_2)[3:length(evis_df_s4_2)] <- as.character(dates)
+evis_df_s4_2 <- evis_df_s4_2 %>%
+   mutate_all(as.numeric)
+
+
+
+#Extract years from dates 
+y2 <- data.frame(Date=(seq(dates[1], dates[length(dates)], by = 'year')))
+y2$Year<-year(y2$Date)
+years <- y2$Year
+years[length(years)]
+
+# #create time series 
+# 
+
+
+stDate <- c(as.numeric(min(years)),01,01)
+
+
+# evis_df_s4_2 <- evis_df_s4 %>%
+#    mutate_all(as.numeric)
+
+# seq(ymd('2000-01-01'),ymd('2003-12-01'),by='months')
+```
+
+
+### Step to create the raster for Smaller Ecoregion
+
+```{r}
+
+XYZ_S4 <- rasterFromXYZ(evis_df_s4_2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+xyzstack <-  stack(XYZ_S4)
+
+plot(XYZ_S4)
+
+beginCluster(7)
+phenmap <- clusterR(xyzstack, fun=greenbrown:::PhenologyRaster, args=list(start = stDate, freq = 12, tsgf=TSGFspline, approach="Deriv", interpolate = TRUE))
+endCluster()
+# phenmap <- PhenologyRaster(xyzstack, start=stDate, freq=12, tsgf="TSGFlinear", approach="Deriv")
+
+plot(phenmap)
+```
+
+**Greenbrown**
+```{r}
+#phenology for  1 pixel
+#select 1 pixel 
+# evis_df_s4_2
+# pixelly <- list()
+# evis_df_s4_2 <- evis_df_s4 %>% select (-c(x, y))
+# for (i in nrow(evis_df_s4_2)*length(evis_df_s4_2)){
+# pixelly[[i]] <- evis_df_s4_2 %>% arrange() %>% slice(i) %>% t() 
+# }
+# 
+# 
+# eviiiii <-  lapply(nrow(evis_df_s4_2), function(x){
+#   pixelly[i] <- evis_df_s4_2 %>%
+#   arrange() %>% slice(i) %>% 
+#   t()
+# })
+
+all_pixels_2 <- evis_df_s4_2 %>% 
+  select (-c(x, y)) %>%
+  arrange() %>% 
+  slice(1:nrow(evis_df_s4_2)) %>% 
+  t() 
+
+# str(all_pixels)
+# 
+# #Extract years from dates 
+# y2 <- data.frame(Date=(seq(dates[1], dates[length(dates)], by = 'year')))
+# y2$Year<-year(y2$Date)
+# years <- y2$Year
+# years[length(years)]
+
+# #create time series 
+# 
+
+EVIseries2 <- ts(all_pixels_2, start=c(years[1], 1), end=c(years[length(years)]
+, 12), frequency=12)
+
+
+
+
+# matrix1 <- matrix() 
+# mapply(all_pixels, function(x){
+#   ts(x, start=c(2000, 1), end=c(2004, 1), frequency=12)
+#   
+# })
+
+#Create copy of time series matrix to mess with
+yt_2 <- EVIseries2
+
+
+#remember, row,column
+# yt[,1]
+# #Will encounter the following error if we attempt to plot more than 10 pixels of data -----
+# #Error in plotts(x = x, y = y, plot.type = plot.type, xy.labels = xy.labels,  : cannot plot more than 10 series as "multiple"
+# plot(yt[,1:10])
+
+
+# time series pre-processing ---interpolating 
+
+#Will encounter error if we attempt to plot more than 1 row
+#the condition has length > 1 and only the first element will be usedError in TsPP(EVIseries2[, 1:2], tsgf = TSGFspline) : TsPP: Yt should be class of 'ts'.
+
+# 
+# xc <- EVIseries[,1]
+# Yt_interpolate_m_test <- TsPP(EVIseries[,1], tsgf=TSGFspline)
+# plot(Yt_interpolate_m_test)
+
+# mapply(all_pixels, function(x){
+#   ts(x, start=c(2000, 1), end=c(2004, 1), frequency=12)
+#   
+# })
+
+#Create empty lists for lapply
+Yt_interpolate_m3 <- list()
+Yt_interpolate_m4 <- list()
+
+
+#Apply Tspp # time series pre-processing ---interpolating across whole data set.  Use lapply to retain time series information. 
+ww <- ncol(EVIseries2)
+Yt_interpolate_m4 <- lapply(seq(ww), function(x){
+Yt_interpolate_m3[[x]]  <- TsPP(EVIseries2[,x], tsgf=TSGFspline)
+})
+
+
+
+# plot(Yt_interpolate_m2[1])
+
+# for(i in seq(ww)){
+# Yt_interpolate_m[[i]] <- TsPP(EVIseries[,i], tsgf=TSGFspline)
+# }
+
+
+#calculate metrics
+# Phen_2000_2007 <- Phenology(Yt_interpolate_m2, approach="White")
+
+
+#Create empty loop for list
+Phen_2000_2007_3 <- list()
+
+for(i in seq(ww)){
+Phen_2000_2007_3[[i]] <- Phenology(Yt_interpolate_m4[[i]], approach="White")
+}
+
+
+# sost <- data.frame(seq(ww))
+# namevector <- c("sos", "eos", 'los', 'pop')
+# sost[ , namevector] <- NA
+# 
+# sostibbless <- tibble(ID,SOS,EOS,LOS,POP)
+# 
+# 
+# sostibbles <- tibble("Id","sos", "eos", 'los', 'pop')
+# namevector <- c("sos", "eos", 'los', 'pop')
+# sostibble[ , namevector] <- NA
+
+
+# seq_len(ww)
+# seq_along()
+
+
+
+#Create empty list containers for loop
+sos2 <- list()
+eos2 <- list()
+los2 <- list()
+pop2 <- list()
+
+
+for(i in seq(ncol(EVIseries2))){
+sos2[[i]] <-  as.numeric( Phen_2000_2007_3[[i]][["sos"]])
+eos2[[i]] <-  as.numeric( Phen_2000_2007_3[[i]][["eos"]])
+los2[[i]] <-  as.numeric( Phen_2000_2007_3[[i]][["los"]])
+pop2[[i]] <-  as.numeric( Phen_2000_2007_3[[i]][["pop"]])
+
+}
+
+plot(Yt_interpolate_m4[[1]])
+
+sos2 <- unlist(sos2)
+eos2 <- unlist(eos2)
+los2 <- unlist(los2)
+pop2 <- unlist(pop2)
+
+
+coords3 <-evis_df_s4_2 %>% select(x, y) 
+coords4 <- coords3 %>% slice(rep(1:n(), each = 8))
+
+
+DF_phenmet_test2 <- data.frame(coords4,sos2, eos2, los2, pop2) %>% cbind(years)
+
+DF_phenmet_testarranged2 <- DF_phenmet_test2 %>% arrange(years)
+
+
+DF_phenmet_testarranged_sf2 = st_as_sf(DF_phenmet_testarranged2, coords = c("x", "y"), crs = 4326)
+par(mar = c(0, 0, 0, 0))
+ggplot() +
+ geom_sf(data = eco_mask2, fill = "grey")+
+geom_sf(data= DF_phenmet_testarranged_sf2)
+# 
+# DF_phenmet_raster2 <- raster(DF_phenmet_testarranged)
+# DF_phenmet_raster<- rasterFromXYZ(DF_phenmet_testarranged, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+# 
+# DF_phenmet_raster2 <- raster(DF_phenmet_testarranged)
+
+
+# DF_phenmet_raster3 <- list()
+# 
+# for(i in nrow(DF_phenmet_testarranged)){
+#   DF_phenmet_raster4 <- raster(DF_phenmet_testarranged_sf) %>% group_by(year)
+# }
+
+# 
+# install.packages("fasterize")
+# library(fasterize)
+# rast <- raster()
+
+# s <- DF_phenmet_testarranged %>% filter(years == "2000")
+
+
+year_chars2 <- as.character(years)
+#year_chars[1]
+
+separated_rasters2 <- list()
+# x <- length(years)
+
+for(g in seq(years)){
+   separated_rasters2[[g]] <- lapply(years[g], function(x){DF_phenmet_testarranged2 %>% filter(years == year_chars2[g])})
+}
+
+DF_phenmet_testarranged2 %>% filter(years == year_chars2[1])
+rasterList2 <- brick()
+rasterList2 <- lapply(1:length(separated_rasters2), function(x){rasterFromXYZ(separated_rasters2[[x]][[1]])})
+
+rasterBrick2 <- brick(rasterList2)
+
+plot(rasterBrick2$pop2.3)
 
 
 # yt[1] <- as.character(years)
@@ -917,6 +1975,7 @@ Loop over 4 pixels, convert into sf object, then into raster
 # load a multi-temporal raster dataset of Normalized Difference Vegetation Index
 library(greenbrown)
 data(ndvimap)
+ndvimap$X1982.01.01
 data(ndvi)
 plot(ndvimap, 13)
 plot(XYZ_S4, 13)
@@ -939,9 +1998,9 @@ seriesprint(ndvi)
 
 ## time series pre-processing.
 x <- TsPP(ndvi, interpolate = TRUE)[366:700]
-plot(x)
+plot(Yt_interpolate_m4[[1]])
 #calculate phenology metrics for first year.
-PhenoDeriv(x, plot=TRUE)
+PhenoDeriv(Yt_interpolate_m4[[2]], plot=TRUE)
 
 
 TSGFssa
@@ -951,9 +2010,9 @@ TSGFssa
 #phenmap <- PhenologyRaster(XYZ_S4, start=c(2000, 1), freq=12, tsgf = "TSGFspline", approach="Trs", fpg = NULL)
 #phenmap <- PhenologyRaster(XYZ_S4, start=c(2000, 1), freq=12, tsgf = "TSGFspline", approach="Trs", fpg = NULL, interpolate = TRUE)
 
-XYZ_S4
+str(XYZ_S4@data@values)
 phenmap <- PhenologyRaster(XYZ_S4, start=c(2000, 1), freq=12, tsgf = "TSGFlinear", approach="Trs")
-phenmap <- PhenologyRaster(xyzstack, start=c(2000, 1), freq=12, tsgf = "TSGFlinear", approach="Trs")
+phenmap <- PhenologyRaster(XYZ_2, start=stDate, freq=12, tsgf = "TSGFlinear", approach="Trs")
 
 
 phenmap <- PhenologyRaster(xyzstack, start=c(2000, 1), freq=12, tsgf="TSGFlinear", check.seasonality=NULL, approach="Trs")
@@ -994,15 +2053,6 @@ plot(lostrend)
 lostrend.cl <- TrendClassification(lostrend)
 plot(lostrend.cl, col=brgr.colors(3), breaks=c(-1.5, -0.5, 0.5, 1.5))
 # only a few pixels have a positive trend in the length of growing season
-
-
-
-
-
-
-
-
-
 
 
 
