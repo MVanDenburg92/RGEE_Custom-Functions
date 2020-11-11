@@ -34,7 +34,7 @@ library(parallel)
 library(rgee)
 
 
-# ee_install()
+ee_install()
 ee_Initialize(email = 'miles.vandenburg@gmail.com')
 
 library(reticulate)
@@ -51,8 +51,8 @@ library(reticulate)
 # ee_Initialize()
 
 
-# ee = import("ee")          # Import the Earth Engine library
-# ee$Initialize() 
+ee = import("ee")          # Import the Earth Engine library
+ee$Initialize() 
 
 np = import("numpy")      # Import Numpy 
 
@@ -130,7 +130,7 @@ s3 <-  s3$filterDate(ee$Date(start),ee$Date(end))$filterBounds(eco_mask_ee)
 
 
 #Show the amount of images in the collection
-nbrImages_s3 = s3$size()$getInfo()
+nbrImages_s3 = s3$size() %>% ee$Number()
 nbrImages_s3
 
 
@@ -141,7 +141,7 @@ s3 = s3$map(function(image){image$clip(eco_mask_ee)})
 s3 = s3$select("EVI")
 
 #Get information about the collection 
-sinfo <- s3$getInfo()
+sinfo <- s3 %>% ee$Number()
 
 
 #get more information on what's stored in the bands
@@ -155,31 +155,31 @@ Same code but with smaller ecoregion
 
 
 ```{r}
-s4 <- ee$ImageCollection('LANDSAT/LT05/C01/T1_32DAY_EVI')
-
-
-s4 <-  s4$filterDate(ee$Date(start),ee$Date(end))$filterBounds(eco_mask_ee2)
-
-
-
-
-#Show the amount of images in the collection
-nbrImages_s4 = s4$size()$getInfo()
-nbrImages_s4
-
-
-#Mapping the clip function over the collection
-s4 = s4$map(function(image){image$clip(eco_mask_ee2)})
-
-#Selecting the EVI band which holds the information
-s4 = s4$select("EVI")
-
-#Get information about the collection 
-s4info <- s4$getInfo()
-
-
-#get more information on what's stored in the bands
-# s3$bandNames()$size()$getInfo()
+ s4 <- ee$ImageCollection(img_collection)
+  # start <- '2000-01-01'
+  # end <- '2008-01-01'
+  # 
+  s4 <-  s4$filterDate(ee$Date(start),ee$Date(end))$filterBounds(eco_mask_ee2)
+  
+  s4info1 <- s4$getInfo()
+  
+  band_name <- s4info1[["bands"]][[1]][["id"]]
+  
+  
+  #Show the amount of images in the collection
+  nbrImages_s4 = s4$size() %>% ee$Number()
+  
+  
+  #Mapping the clip function over the collection
+  s4 = s4$map(function(image){image$clip(eco_mask_ee2)})
+  
+  s4info2 <- s4 %>% ee$Number()
+  
+  #Selecting the EVI band which holds the information
+  s4 = s4$select(band_name)
+  
+  #Get information about the collection 
+  s4info3 <- s4 %>% ee$Number()
 
 ```
 
@@ -187,7 +187,7 @@ s4info <- s4$getInfo()
 
 Get setup for the loop.  In case the loop crashes or doesn't work, you must rerun the above chunk first before running this chunk again. 
 ```{r}
-nimages <- s3$size()$getInfo()
+nimages <- s3$size() %>% ee$Number()
 ic_date <- ee_get_date_ic(s3)
 
 
@@ -204,10 +204,10 @@ evi_values3 <- list()
 
 # s2_img_list[[15]]$getInfo()
 
-for(i in seq_len(nimages)) {
+for(i in seq_len(nimages$getInfo())) {
   py_index <- i - 1
   s2_img <- ee$Image(s3$toList(1, py_index)$get(0))
-  s2_name <- s2_img$get('system:index')$getInfo()
+  s2_name <- s2_img$get('system:index')%>% ee$Number()
   s2_names[[i]] <- s2_name
   s2_img <- s2_img$select("EVI")$rename(s2_name)
   s2_img_list[[i]] <- ee$Image$pixelLonLat()$addBands(s2_img)
@@ -219,8 +219,10 @@ for(i in seq_len(nimages)) {
 }
 
 
-lats <-  np$array((ee$Array(s2_img_list[[1]]$get("latitude"))$getInfo()))
-lngs  <- np$array((ee$Array(s2_img_list[[1]]$get("longitude"))$getInfo()))
+
+
+lats <-  np$array((ee$Array(s2_img_list[[1]]$get("latitude")) %>% ee$Number()))
+lngs  <- np$array((ee$Array(s2_img_list[[1]]$get("longitude")) %>% ee$Number()))
 
 # 
 # 
@@ -280,62 +282,45 @@ lngs  <- np$array((ee$Array(s2_img_list[[1]]$get("longitude"))$getInfo()))
 
 Get setup for the loop.  In case the loop crashes or doesn't work, you must rerun the above chunk first before running this chunk again. 
 ```{r}
-nimages2 <- s4$size()$getInfo()
-ic_date2 <- ee_get_date_ic(s4)
-
-
-s4_img_list <- list()
-latlng2 <- list()
-lats2 <- list()
-lngs2 <- list()
-evi_values4 <- list()
-s4_names <- list()
-
-evi_values5 <- list()
-evi_values6 <- list()
-
-
-
-UseCores <- detectCores() - 4
-
-
-#Register CoreCluster
-cl <- makeCluster(UseCores)
-registerDoParallel(cl)
-
-#Use foreach loop and %dopar% command
-system.time(Yt_interpolate_m2 <- foreach(i=1:length(evisti)) %dopar% {
+  nimages2 <- s4 %>% ee$FeatureCollection$size() %>% ee$Number()
+  ic_date2 <- ee_get_date_ic(s4)
   
-library(greenbrown)
   
-Yt_interpolate_m[[i]]  <- TsPP(evisti[[i]], tsgf=TSGFspline)
+  s4_img_list <- list()
+  latlng2 <- list()
+  lats2 <- list()
+  lngs2 <- list()
+  evi_values4 <- list()
+  s4_names <- list()
+  
+  evi_values5 <- list()
+  evi_values6 <- list()
 
-}
-)
-
-getDoParWorkers()
-registerDoSEQ()
-stopCluster(cl)
 
 # s2_img_list[[15]]$getInfo()
-
-for(i in seq_len(nimages2)) {
-  py_index <- i - 1
-  s4_img <- ee$Image(s4$toList(1, py_index)$get(0))
-  s4_name <- s4_img$get('system:index')$getInfo()
-  s4_names[[i]] <- s4_name
-  s4_img <- s4_img$select("EVI")$rename(s4_name)
-  s4_img_list[[i]] <- ee$Image$pixelLonLat()$addBands(s4_img)
-  s4_img_list[[i]] <-  s4_img_list[[i]]$reduceRegion(reducer = ee$Reducer$toList(),
-                                                        geometry  = eco_mask_ee2,
-                                                        maxPixels = 1e6,
-                                                        scale = 30,
-                                                        bestEffort = TRUE)
+system.time(
+for(i in seq(nimages2$getInfo())){
+    # as.numeric(i)
+    py_index <- i - 1
+    s4_img <- ee$Image(s4$toList(1, py_index)$get(0))
+    s4_name <- s4_img$get('system:index')$getInfo()
+    s4_names[[i]] <- s4_name
+    s4_img <- s4_img$select(band_name)$rename(s4_name)
+    s4_img_list[[i]] <- ee$Image$pixelLonLat()$addBands(s4_img)
+    s4_img_list[[i]] <-  s4_img_list[[i]]$reduceRegion(reducer = ee$Reducer$toList(),
+                                                       geometry  = eco_mask_ee2,
+                                                       maxPixels = 1e6,
+                                                       scale = 30,
+                                                       bestEffort = TRUE)
 }
-
-
-lats2 <-  np$array((ee$Array(s4_img_list[[1]]$get("latitude"))$getInfo()))
+) 
+lats2 <- np$array((ee$Array(s4_img_list[[1]]$get("latitude"))$getInfo()))
 lngs2 <- np$array((ee$Array(s4_img_list[[1]]$get("longitude"))$getInfo()))
+
+#   user  system elapsed 
+   # 1.14    0.09   31.12 
+
+
 
 # 
 # 
@@ -393,9 +378,10 @@ lngs2 <- np$array((ee$Array(s4_img_list[[1]]$get("longitude"))$getInfo()))
 Obtain the EVI values and clean the results of the google earth engine list -- LARGER IMAGE
 ```{r}
 
+
 #For loop to extract all the iamges from the s2_img_list list containing them and converting them to ee.List elements storing them in the evi_values2 list. 
-for(index in seq_len(nimages)) {
-      evi_values2[[index]] <-  ee$List(s2_img_list[[index]]$get(s2_names[[index]]))$getInfo()
+for(index in seq_len(nimages$getInfo)) {
+      evi_values2[[index]] <-  ee$List(s2_img_list[[index]]$get(s2_names[[index]])) %>% ee$Number()
       
 }
 
@@ -1436,7 +1422,7 @@ For smaller region: Obtain the EVI values and clean the results of the google ea
 
 #For loop to extract all the iamges from the s2_img_list list containing them and converting them to ee.List elements storing them in the evi_values2 list. 
 
-for(index in seq_len(nimages2)) {
+for(index in 1:94) {
       evi_values4[[index]] <-  ee$List(s4_img_list[[index]]$get(s4_names[[index]]))$getInfo()
       
 }
@@ -1576,12 +1562,20 @@ stDate <- c(as.numeric(min(years)),01,01)
 ```{r}
 
 XYZ_S4 <- rasterFromXYZ(evis_df_s4_2, crs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+
+
+
+XYZ_S4 <- setZ(XYZ_S4, dates)
+
+
+z <- as.Date('2000-1-1') + 0:2
+
 xyzstack <-  stack(XYZ_S4)
 
 plot(XYZ_S4)
 
 beginCluster(7)
-phenmap <- clusterR(xyzstack, fun=greenbrown:::PhenologyRaster, args=list(start = stDate, freq = 12, tsgf=TSGFspline, approach="Deriv", interpolate = TRUE))
+phenmap <- clusterR(XYZ_S4, fun=greenbrown:::PhenologyRaster, args=list(start = stDate, freq = 12, tsgf=TSGFspline, approach="Deriv", interpolate = TRUE))
 endCluster()
 # phenmap <- PhenologyRaster(xyzstack, start=stDate, freq=12, tsgf="TSGFlinear", approach="Deriv")
 
