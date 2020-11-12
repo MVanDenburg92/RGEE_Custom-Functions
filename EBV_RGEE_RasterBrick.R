@@ -1,12 +1,26 @@
+library(greenbrown)
+library(sf)
+library(sp)
+library(tidyverse)
+
+library(raster)
+library(qdapRegex)
+library(lubridate)
+
+library(doParallel) 
+library(foreach)
+library(parallel)
+library(gsubfn)
 
 
-evis_df_s4 <- evis_df_s4_2
+evis_df_s4 <- evis_df_s4
 
-dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
+evis_df_s4 <- backup
+
+
+dataframe_processing <- function(){
   
-  library(tidyverse)
-  
-  pos <- grep(pattern = "NA", x = evis_df_s4)
+  pos <- grep(pattern = "NA", evis_df_s4)
   while(length(pos)>0){
     for(t in pos){
       if(t < ncol(evis_df_s4)){
@@ -21,27 +35,19 @@ dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
   
   coords3 <- evis_df_s4 %>% dplyr::select(x, y) 
   
-  evis_df_s4 <- evis_df_s4 %>% select (-c(x, y))
-  
+  evis_df_s4 <- evis_df_s4 %>% select(-c(x, y))
   
   evis_df_s4[evis_df_s4 < 0] = 0
   
   evis_df_s4_2 <- data.frame(coords3,evis_df_s4)
   
-  
-  
-  # 
-  # idcy <-  ic_date2$time_start
-  # dates <- ymd(idcy)
-  # 
-  # 
   #add reformatted dates
   
   colnames_df <-  names(evis_df_s4_2)
   
   #Extract dates from colummns
-  dates <- strapplyc(colnames_df, "[0-9]{8,}", simplify = TRUE)
-  dates <- ymd(idcy)
+  dates <- gsubfn:::strapplyc(colnames_df, "[0-9]{8,}", simplify = TRUE)
+  dates <- lubridate:::ymd(dates[-c(1:2)])
   
   names(evis_df_s4_2)[3:length(evis_df_s4_2)] <- as.character(dates)
   
@@ -53,23 +59,15 @@ dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
   
   #Extract years from dates 
   y2 <- data.frame(Date=(seq(dates[1], dates[length(dates)], by = 'year')))
-  y2$Year<-year(y2$Date)
+  y2$Year <-year(y2$Date)
   years <- y2$Year
   
-  #Test result
-  years[length(years)]
   
-  
-  all_pixels_2 <- evis_df_s4_2 %>% 
-    select (-c(x, y)) %>%
-    arrange() %>% 
-    slice(1:nrow(evis_df_s4_2)) %>% 
-    t() 
+  all_pixels_2 <- evis_df_s4_2 %>% dplyr:::select(-c(x, y)) %>% arrange() %>% slice(1:nrow(evis_df_s4_2)) %>% t() 
   
   
   # #create time series 
-  EVIseries2 <- ts(all_pixels_2, start=c(years[1], 1), end=c(years[length(years)]
-                                                             , 12), frequency=12)
+  EVIseries2 <- ts(all_pixels_2, start=c(years[1], 1), end=c(years[length(years)], 12), frequency=12)
   
   
   #Create empty lists for lapply
@@ -98,27 +96,26 @@ dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
   
   
   model_phen <- function(x){
-    Phen_2000_2007_3[[x]] <- Phenology(Yt_interpolate_m4[[x]], approach="White")
+    Phen_2000_2007_3[[x]] <- greenbrown:::Phenology(Yt_interpolate_m4[[x]], approach="White")
   }
   
   UseCores <- detectCores() - 2
   
-  system.time({
-    clust <- makeCluster(UseCores)
-    clusterEvalQ(clust, library("greenbrown"))
-    clusterExport(clust, c("EVIseries2","Yt_interpolate_m3"))
-    Yt_interpolate_m4 <- parLapply(clust, seq(ww), model.mse)})
+  
+  clust <- makeCluster(UseCores)
+  parallel:::clusterEvalQ(cl = clust, library("greenbrown"))
+  parallel:::clusterExport(cl = clust, c("EVIseries2","Yt_interpolate_m3"), envir=environment())
+  Yt_interpolate_m4 <- parLapply(clust, seq(ww), model.mse)
   
   # user  system elapsed 
   # 0.03    0.01    5.69 
   
   
-  system.time({
-    # clust <- makeCluster(UseCores)
-    clusterEvalQ(clust, library("greenbrown"))
-    clusterExport(clust, c('Phen_2000_2007_3', 'Yt_interpolate_m4'))
-    Phen_2000_2007_3 <- parLapply(clust, seq(ww), model_phen)})
   
+  # clust <- makeCluster(UseCores)
+  clusterEvalQ(clust, library("greenbrown"))
+  clusterExport(clust, c('Phen_2000_2007_3', 'Yt_interpolate_m4'),envir=environment())
+  Phen_2000_2007_3 <- parLapply(clust, seq(ww), model_phen)
   
   #4 cores
   # #   user  system elapsed 
@@ -134,6 +131,7 @@ dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
   getDoParWorkers()
   registerDoSEQ()
   stopImplicitCluster()
+  
   
   
   #Create empty list containers for loop
@@ -159,8 +157,9 @@ dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
   pop2 <- unlist(pop2)
   
   
-  coords3 <-evis_df_s4_2 %>% select(x, y) 
+  coords3 <-evis_df_s4_2 %>% dplyr:::select(x, y) 
   coords4 <- coords3 %>% slice(rep(1:n(), each = 8))
+  
   
   
   DF_phenmet_test2 <- data.frame(coords4,sos2, eos2, los2, pop2) %>% cbind(years)
@@ -192,10 +191,13 @@ dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
   
 }
 
+rasterBrick_out <- dataframe_processing()
+
+plot(rasterBrick_out)
 
 
 rasterBrick_out <- dataframe_processing()
 
-plot(rasterBrick_out)
+# plot(rasterBrick_out)
 
 

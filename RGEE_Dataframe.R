@@ -27,6 +27,9 @@ library(rgee)
 # ee_install()
 ee_Initialize(email = 'miles.vandenburg@gmail.com')
 
+
+
+##DO NOT RUN UNTIL YOU HAVE INTIALIZED GEE|  If you do, your system will brick because you need to define the python environment using rgee first.
 library(reticulate)
 
 # ee_check()
@@ -41,8 +44,8 @@ library(reticulate)
 # ee_Initialize()
 
 
-# ee = import("ee")          # Import the Earth Engine library
-# ee$Initialize() 
+ee = import("ee")          # Import the Earth Engine library
+ee$Initialize() 
 
 
 
@@ -51,15 +54,15 @@ library(reticulate)
 #Smaller ecoregion
 
 
-x = 'Ecoregion_Small.shp'
+shapefile = 'Ecoregion_Small.shp'
 band_name = 'EVI'
 img_collection = "LANDSAT/LT05/C01/T1_32DAY_EVI"
 start = "2000-01-01"
 end = "2008-01-01"
 
-gee_extract <- function(x = 'Ecoregion_Small.shp', band_name = 'EVI', img_collection = "LANDSAT/LT05/C01/T1_32DAY_EVI", start = "2000-01-01", end = "2008-01-01") {
+gee_extract <- function(){
   
-  eco_mask2 <- st_read(x,quiet = TRUE) %>% st_transform(4326) 
+  eco_mask2 <- st_read(shapefile,quiet = TRUE) %>% st_transform(4326) 
   
   # plot(eco_mask2)
   # 

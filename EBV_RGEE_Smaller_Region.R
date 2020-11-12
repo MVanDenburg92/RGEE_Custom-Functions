@@ -51,13 +51,13 @@ library(reticulate)
 #Smaller ecoregion
 
 
-x = 'Ecoregion_Small.shp'
+shape = 'Ecoregion_Small.shp'
 band_name = 'EVI'
 img_collection = "LANDSAT/LT05/C01/T1_32DAY_EVI"
 start = "2000-01-01"
 end = "2008-01-01"
   
-gee_extract <- function(x = 'Ecoregion_Small.shp', band_name = 'EVI', img_collection = "LANDSAT/LT05/C01/T1_32DAY_EVI", start = "2000-01-01", end = "2008-01-01") {
+gee_extract <- function(shape = 'Ecoregion_Small.shp', band_name = 'EVI', img_collection = "LANDSAT/LT05/C01/T1_32DAY_EVI", start = "2000-01-01", end = "2008-01-01") {
   
   eco_mask2 <- st_read(x,quiet = TRUE) %>% st_transform(4326) 
   
@@ -399,9 +399,7 @@ dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
   model.mse <- function(x){
     Yt_interpolate_m3[[x]]  <- greenbrown::TsPP(EVIseries2[,x], tsgf=TSGFspline)
   }
-  
-  
-  
+
   
   model_phen <- function(x){
     Phen_2000_2007_3[[x]] <- Phenology(Yt_interpolate_m4[[x]], approach="White")
@@ -411,8 +409,8 @@ dataframe_processing <- function(evis_df_s4 = evis_df_s4_2) {
   
   system.time({
     clust <- makeCluster(UseCores)
-    clusterEvalQ(clust, library("greenbrown"))
-    clusterExport(clust, c("EVIseries2","Yt_interpolate_m3"))
+    clusterEvalQ(cl =clust, library("greenbrown"))
+    clusterExport(cl =clust, c("EVIseries2","Yt_interpolate_m3"))
     Yt_interpolate_m4 <- parLapply(clust, seq(ww), model.mse)})
   
   # user  system elapsed 
