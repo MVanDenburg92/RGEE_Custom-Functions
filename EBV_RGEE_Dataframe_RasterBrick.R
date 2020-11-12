@@ -169,21 +169,8 @@ evis_df_s4 <- gee_extract()
 ##############################
 backup <- evis_df_s4
 
+#Will auto run with the dataframe already made. 
 dataframe_processing <- function(){
-  
-  library(greenbrown)
-  library(sf)
-  library(sp)
-  library(tidyverse)
-  
-  library(raster)
-  library(qdapRegex)
-  library(lubridate)
-  
-  library(doParallel)  #Foreach Parallel Adaptor 
-  library(foreach)
-  library(parallel)
-  library(gsubfn)
 
 pos <- grep(pattern = "NA", evis_df_s4)
 while(length(pos)>0){
